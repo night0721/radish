@@ -8,12 +8,11 @@
 
 int current = 0;
 token_t *tokens;
-
 expr_t *expression(void);
 
 void error(token_t *token, char *message)
 {
-	if (token->type == END_OF_FILE) {
+	if (token->type == TOKEN_EOF) {
 		fprintf(stderr, "[line %d] at end: %s\n", token->line, message);
 	} else {
 		fprintf(stderr, "[line %d] at '%s': %s\n", token->line, token->value, message);
@@ -26,25 +25,25 @@ void free_expr(expr_t *expr)
 	if (!expr)
 		return;
 	switch (expr->type) {
-		case BINARY:
-			free(expr->as.binary.binary_op.value);
+		case EXPR_BINARY:
+			free(expr->as.binary.operator.value);
 			free_expr(expr->as.binary.left);
 			free_expr(expr->as.binary.right);
 			free(expr);
 			break;
 
-		case GROUPING:
+		case EXPR_GROUPING:
 			free_expr(expr->as.grouping.expression);
 			free(expr);
 			break;
 
-		case UNARY:
-			free(expr->as.unary.unary_op.value);
+		case EXPR_UNARY:
+			free(expr->as.unary.operator.value);
 			free_expr(expr->as.unary.right);
 			free(expr);
 			break;
 
-		case LITERAL:
+		case EXPR_LITERAL:
 			if (expr->as.literal.value.type == VAL_STRING) {
 				free(expr->as.literal.value.as.string);
 			}
@@ -56,24 +55,14 @@ void free_expr(expr_t *expr)
 	}
 }
 
-expr_t *parse(token_t *tks)
-{
-	tokens = tks;
-	if (errno == 65) {
-		return NULL;
-	} else {
-		return expression();
-	}
-}
-
 token_t *peek(void)
 {
 	return &tokens[current];
 }
 
-int isAtEnd(void)
+int end(void)
 {
-	return tokens[current].type == END_OF_FILE;
+	return tokens[current].type == TOKEN_EOF;
 }
 
 token_t *previous(void)
@@ -83,10 +72,9 @@ token_t *previous(void)
 
 void advance(void)
 {
-	if (!isAtEnd())
+	if (!end())
 		current++;
 }
-
 
 int check(token_type_t type)
 {
@@ -106,12 +94,13 @@ void consume(token_type_t type, char *message) {
 
 expr_t *primary(void)
 {
-	if (check(FALSE) || check(TRUE) || check(NIL) || check(NUMBER) || check(STRING)) {
+	if (check(TOKEN_FALSE) || check(TOKEN_TRUE) || check(TOKEN_NIL) ||
+			check(TOKEN_NUMBER) || check(TOKEN_STRING)) {
 		return create_literal_expr(previous());
 	}
-	if (check(LEFT_PAREN)) {
+	if (check(TOKEN_LEFT_PAREN)) {
 		expr_t *expr = expression();
-		consume(RIGHT_PAREN, "Expect ')' after expression.");
+		consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 		return create_grouping_expr(expr);
 	}
 	error(peek(), "Expect expression.");
@@ -120,7 +109,7 @@ expr_t *primary(void)
 
 expr_t *unary(void)
 {
-	if (check(BANG) || check(MINUS)) {
+	if (check(TOKEN_BANG) || check(TOKEN_MINUS)) {
 		token_t *operator = previous();
 		expr_t *right = unary();
 		return create_unary_expr(operator, right);
@@ -133,7 +122,7 @@ expr_t *factor(void)
 {
 	expr_t *expr = unary();
 
-	while (check(SLASH) || check(STAR)) {
+	while (check(TOKEN_SLASH) || check(TOKEN_STAR)) {
 		token_t *operator = previous();
 		expr_t *right = unary();
 		expr = create_binary_expr(operator, expr, right);
@@ -146,7 +135,7 @@ expr_t *term(void)
 {
 	expr_t *expr = factor();
 
-	while (check(MINUS) || check(PLUS)) {
+	while (check(TOKEN_MINUS) || check(TOKEN_PLUS)) {
 		token_t *operator = previous();
 		expr_t *right = factor();
 		expr = create_binary_expr(operator, expr, right);
@@ -159,7 +148,8 @@ expr_t *comparison(void)
 {
 	expr_t *expr = term();
 
-	while (check(GREATER) || check(GREATER_EQUAL) || check(LESS) || check(LESS_EQUAL)) {
+	while (check(TOKEN_GREATER) || check(TOKEN_GREATER_EQUAL) || check(TOKEN_LESS)
+			|| check(TOKEN_LESS_EQUAL)) {
 		token_t *operator = previous();
 		expr_t *right = term();
 		expr = create_binary_expr(operator, expr, right);
@@ -172,7 +162,7 @@ expr_t *equality(void)
 {
 	expr_t *expr = comparison();
 
-	while (check(BANG_EQUAL) || check(EQUAL_EQUAL)) {
+	while (check(TOKEN_BANG_EQUAL) || check(TOKEN_EQUAL_EQUAL)) {
 		token_t *operator = previous();
 		expr_t *right = comparison();
 		expr = create_binary_expr(operator, expr, right);
@@ -186,22 +176,99 @@ expr_t *expression(void)
 	return equality();
 }
 
+stmt_t print_stmt(void)
+{
+	expr_t *value = expression();
+	consume(TOKEN_SEMICOLON, "Expect ; after value.");
+	return (stmt_t) {
+		.type = STMT_PRINT,
+		.as.print.expression = value,
+	};
+}
+
+stmt_t expression_stmt(void)
+{
+	expr_t *expr = expression();
+	consume(TOKEN_SEMICOLON, "Expect ; after expression.");
+	return (stmt_t) {
+		.type = STMT_EXPR,
+		.as.expr.expression = expr,
+	};
+}
+
+stmt_t statement(void)
+{
+	if (check(TOKEN_PRINT))
+		return print_stmt();
+	return expression_stmt();
+}
+
+void stmt_add(stmt_array_t *array, stmt_t stmt)
+{
+	if (array->length == array->capacity) {
+		array->capacity *= 2;
+		array->statements = realloc(array->statements, array->capacity * sizeof(stmt_t));
+	}
+	array->statements[array->length++] = stmt;
+}
+
+void free_statements(stmt_array_t *array)
+{
+	for (int i = 0; i < array->length; i++) {
+		if (array->statements[i].type == STMT_PRINT) {
+			free_expr(array->statements[i].as.print.expression);
+		}
+		if (array->statements[i].type == STMT_EXPR) {
+			free_expr(array->statements[i].as.expr.expression);
+		}
+	}
+	free(array->statements);
+	free(array);
+}
+
+stmt_array_t *parse(token_t *tks)
+{
+	tokens = tks;
+	if (errno == 65) {
+		return NULL;
+	} else {
+		stmt_array_t *statements = malloc(sizeof(stmt_array_t));
+		statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
+		statements->length = 0;
+		statements->capacity = DEFAULT_STMTS_SIZE;
+		while (!end()) {
+			stmt_add(statements, statement());
+		}
+		return statements;
+	}
+}
+
+expr_t *parse_expr(token_t *tks)
+{
+	tokens = tks;
+	if (errno == 65) {
+		return NULL;
+	} else {
+		return expression();
+	}
+}
+
 void synchronize(void)
 {
 	advance();
 
-	while (!isAtEnd()) {
-		if (previous()->type == SEMICOLON) return;
+	while (!end()) {
+		if (previous()->type == TOKEN_SEMICOLON) return;
 
 		switch (peek()->type) {
-			case CLASS:
-			case FUN:
-			case VAR:
-			case FOR:
-			case IF:
-			case WHILE:
-			case PRINT:
-			case RETURN:
+			case TOKEN_CLASS:
+			case TOKEN_FUN:
+			case TOKEN_VAR:
+			case TOKEN_FOR:
+			case TOKEN_IF:
+			case TOKEN_WHILE:
+			case TOKEN_PRINT:
+			case TOKEN_RETURN:
 				return;
 			default:
 				return;

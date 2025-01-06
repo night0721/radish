@@ -7,35 +7,35 @@
 #include "lexer.h"
 
 const keyword_map reserved_keywords[] = {
-	{"and", AND}, {"class", CLASS}, {"else", ELSE},
-	{"false", FALSE}, {"fun", FUN}, {"for", FOR},
-	{"if", IF}, {"nil", NIL}, {"or", OR},
-	{"print", PRINT}, {"return", RETURN},
-	{"super", SUPER}, {"this", THIS}, {"true", TRUE},
-	{"var", VAR}, {"while", WHILE}
+	{"and", TOKEN_AND}, {"class", TOKEN_CLASS}, {"else", TOKEN_ELSE},
+	{"false", TOKEN_FALSE}, {"fun", TOKEN_FUN}, {"for", TOKEN_FOR},
+	{"if", TOKEN_IF}, {"nil", TOKEN_NIL}, {"or", TOKEN_OR},
+	{"print", TOKEN_PRINT}, {"return", TOKEN_RETURN},
+	{"super", TOKEN_SUPER}, {"this", TOKEN_THIS}, {"true", TOKEN_TRUE},
+	{"var", TOKEN_VAR}, {"while", TOKEN_WHILE}
 };
 
 const keyword_map regular_tokens[] = {
-	{"LEFT_PAREN", LEFT_PAREN}, {"RIGHT_PAREN", RIGHT_PAREN},
-	{"LEFT_BRACE", LEFT_BRACE}, {"RIGHT_BRACE", RIGHT_BRACE},
-	{"COMMA", COMMA}, {"DOT", DOT}, {"MINUS", MINUS},
-	{"PLUS", PLUS}, {"SEMICOLON", SEMICOLON}, {"SLASH", SLASH},
-	{"STAR", STAR}, {"BANG", BANG}, {"BANG_EQUAL", BANG_EQUAL},
-	{"EQUAL", EQUAL}, {"EQUAL_EQUAL", EQUAL_EQUAL}, {"GREATER", GREATER},
-	{"GREATER_EQUAL", GREATER_EQUAL}, {"LESS", LESS}, {"LESS_EQUAL", LESS_EQUAL},
-	{"IDENTIFIER", IDENTIFIER}, {"STRING", STRING}, {"NUMBER", NUMBER},
-	{"AND", AND}, {"CLASS", CLASS}, {"ELSE", ELSE}, {"FALSE", FALSE},
-	{"FUN", FUN}, {"FOR", FOR}, {"IF", IF}, {"NIL", NIL},
-	{"OR", OR}, {"PRINT", PRINT}, {"RETURN", RETURN},
-	{"SUPER", SUPER}, {"THIS", THIS}, {"TRUE", TRUE},
-	{"VAR", VAR}, {"WHILE", WHILE}, {"END_OF_FILE", END_OF_FILE}
+	{"LEFT_PAREN", TOKEN_LEFT_PAREN}, {"RIGHT_PAREN", TOKEN_RIGHT_PAREN},
+	{"LEFT_BRACE", TOKEN_LEFT_BRACE}, {"RIGHT_BRACE", TOKEN_RIGHT_BRACE},
+	{"COMMA", TOKEN_COMMA}, {"DOT", TOKEN_DOT}, {"MINUS", TOKEN_MINUS},
+	{"PLUS", TOKEN_PLUS}, {"SEMICOLON", TOKEN_SEMICOLON}, {"SLASH", TOKEN_SLASH},
+	{"STAR", TOKEN_STAR}, {"BANG", TOKEN_BANG}, {"BANG_EQUAL", TOKEN_BANG_EQUAL},
+	{"EQUAL", TOKEN_EQUAL}, {"EQUAL_EQUAL", TOKEN_EQUAL_EQUAL}, {"GREATER", TOKEN_GREATER},
+	{"GREATER_EQUAL", TOKEN_GREATER_EQUAL}, {"LESS", TOKEN_LESS}, {"LESS_EQUAL", TOKEN_LESS_EQUAL},
+	{"IDENTIFIER", TOKEN_IDENTIFIER}, {"STRING", TOKEN_STRING}, {"NUMBER", TOKEN_NUMBER},
+	{"AND", TOKEN_AND}, {"CLASS", TOKEN_CLASS}, {"ELSE", TOKEN_ELSE}, {"FALSE", TOKEN_FALSE},
+	{"FUN", TOKEN_FUN}, {"FOR", TOKEN_FOR}, {"IF", TOKEN_IF}, {"NIL", TOKEN_NIL},
+	{"OR", TOKEN_OR}, {"PRINT", TOKEN_PRINT}, {"RETURN", TOKEN_RETURN},
+	{"SUPER", TOKEN_SUPER}, {"THIS", TOKEN_THIS}, {"TRUE", TOKEN_TRUE},
+	{"VAR", TOKEN_VAR}, {"WHILE", TOKEN_WHILE}, {"END_OF_FILE", TOKEN_EOF}
 };
 
 char *read_source(const char *filename)
 {
 	FILE *file = fopen(filename, "r");
 	if (file == NULL) {
-		fprintf(stderr, "rd: Error reading file: %s\n", filename);
+		fprintf(stderr, "Error reading file: %s\n", filename);
 		return NULL;
 	}
 
@@ -45,14 +45,14 @@ char *read_source(const char *filename)
 
 	char *source = malloc(file_size + 1);
 	if (source == NULL) {
-		fprintf(stderr, "rd: Error allocating memory\n");
+		fprintf(stderr, "Memory allocation failed\n");
 		fclose(file);
 		return NULL;
 	}
 
 	size_t bytes_read = fread(source, 1, file_size, file);
 	if (bytes_read < file_size) {
-		fprintf(stderr, "rd: Error reading file contents\n");
+		fprintf(stderr, "Error reading file contents\n");
 		free(source);
 		fclose(file);
 		return NULL;
@@ -105,11 +105,11 @@ char *type_str(token_type_t type)
 
 void print_tokens(token_t *tokens)
 {
-	for (int i = 0; tokens[i].type != END_OF_FILE; i++) {
+	for (int i = 0; tokens[i].type != TOKEN_EOF; i++) {
 		token_t token = tokens[i];
-		if (token.type == STRING) {
+		if (token.type == TOKEN_STRING) {
 			printf("STRING \"%s\" %s\n", token.value, token.value);
-		} else if (token.type == NUMBER) {
+		} else if (token.type == TOKEN_NUMBER) {
 			double value = strtod(token.value, NULL);
 			if (value == (int) value) {
 				printf("NUMBER %s %d.0\n", token.value, (int) value); 
@@ -142,74 +142,71 @@ array_t *tokenize(char *filename)
 	tokens->capacity = DEFAULT_TOKENS_SIZE;
 
 	char *source = read_source(filename);
-	if (!source) {
-		return NULL;
-	}
 	int line = 1;
 	size_t source_len = strlen(source);
 	if (source_len > 0) {
 		for (int i = 0; i < source_len; i++) {
 			switch (source[i]) {
 				case '(': 
-					token_add(tokens, token_gen(LEFT_PAREN, "(", line));
+					token_add(tokens, token_gen(TOKEN_LEFT_PAREN, "(", line));
 					break;
 				case ')':
-					token_add(tokens, token_gen(RIGHT_PAREN, ")", line));
+					token_add(tokens, token_gen(TOKEN_RIGHT_PAREN, ")", line));
 					break;
 				case '{':
-					token_add(tokens, token_gen(LEFT_BRACE, "{", line));
+					token_add(tokens, token_gen(TOKEN_LEFT_BRACE, "{", line));
 					break;
 				case '}':
-					token_add(tokens, token_gen(RIGHT_BRACE, "}", line));
+					token_add(tokens, token_gen(TOKEN_RIGHT_BRACE, "}", line));
 					break;
 				case '*':
-					token_add(tokens, token_gen(STAR, "*", line));
+					token_add(tokens, token_gen(TOKEN_STAR, "*", line));
 					break;
 				case '.':
-					token_add(tokens, token_gen(DOT, ".", line));
+					token_add(tokens, token_gen(TOKEN_DOT, ".", line));
 					break;
 				case ',':
-					token_add(tokens, token_gen(COMMA, ",", line));
+					token_add(tokens, token_gen(TOKEN_COMMA, ",", line));
 					break;
 				case '+':
-					token_add(tokens, token_gen(PLUS, "+", line));
+					token_add(tokens, token_gen(TOKEN_PLUS, "+", line));
 					break;
 				case '-':
-					token_add(tokens, token_gen(MINUS, "-", line));
+					token_add(tokens, token_gen(TOKEN_MINUS, "-", line));
 					break;
 				case ';':
-					token_add(tokens, token_gen(SEMICOLON, ";", line));
+					token_add(tokens, token_gen(TOKEN_SEMICOLON, ";", line));
 					break;
 				case '=':
 					if (source[i + 1] == '=') {
-						token_add(tokens, token_gen(EQUAL_EQUAL, "==", line));
+						token_add(tokens, token_gen(TOKEN_EQUAL_EQUAL, "==", line));
 						i++;
 					} else {
-						token_add(tokens, token_gen(EQUAL, "=", line));
+						token_add(tokens, token_gen(TOKEN_EQUAL, "=", line));
 					}
 					break;
 				case '!':
 					if (source[i + 1] == '=') {
-						token_add(tokens, token_gen(BANG_EQUAL, "!=", line));
+						token_add(tokens, token_gen(TOKEN_BANG_EQUAL, "!=", line));
 						i++;
 					} else {
-						token_add(tokens, token_gen(BANG, "!", line));
+						token_add(tokens, token_gen(TOKEN_BANG, "!", line));
 					}
 					break;
 				case '>':
 					if (source[i + 1] == '=') {
-						token_add(tokens, token_gen(GREATER_EQUAL, ">=", line));
+						token_add(tokens, token_gen(TOKEN_GREATER_EQUAL, ">=", line));
 						i++;
 					} else {
-						token_add(tokens, token_gen(GREATER, ">", line));
+						token_add(tokens, token_gen(TOKEN_GREATER, ">", line));
 					}
 					break;
 				case '<':
 					if (source[i + 1] == '=') {
-						token_add(tokens, token_gen(LESS_EQUAL, "<=", line));
+						token_add(tokens, token_gen(TOKEN_LESS_EQUAL, "<=", line));
 						i++;
 					} else {
-						token_add(tokens, token_gen(LESS, "<", line));
+						token_add(tokens, token_gen(TOKEN_LESS, "<", line));
 					}
 					break;
 				case '/':
@@ -220,7 +217,7 @@ array_t *tokenize(char *filename)
 						}
 						i--;
 					} else {
-						token_add(tokens, token_gen(SLASH, "/", line));
+						token_add(tokens, token_gen(TOKEN_SLASH, "/", line));
 					}
 					break;
 				case ' ':
@@ -246,7 +243,7 @@ array_t *tokenize(char *filename)
 						char str[len + 1];
 						strncpy(str, &source[str_start], len);
 						str[len] = 0;
-						token_add(tokens, token_gen(STRING, str, line));
+						token_add(tokens, token_gen(TOKEN_STRING, str, line));
 					}
 					break;
 
@@ -277,7 +274,7 @@ array_t *tokenize(char *filename)
 							}
 						}
 						if (!found) {
-							token_add(tokens, token_gen(IDENTIFIER, id, line));
+							token_add(tokens, token_gen(TOKEN_IDENTIFIER, id, line));
 						}
 						i--;
 						break;
@@ -296,7 +293,7 @@ array_t *tokenize(char *filename)
 						char integer[len + 1];
 						strncpy(integer, iend, len);
 						integer[len] = 0;
-						token_add(tokens, token_gen(NUMBER, integer, line));
+						token_add(tokens, token_gen(TOKEN_NUMBER, integer, line));
 						i--;
 
 					} else {
@@ -306,7 +303,7 @@ array_t *tokenize(char *filename)
 			}
 		}
 	}
-	token_add(tokens, token_gen(END_OF_FILE, "EOF", line));
+	token_add(tokens, token_gen(TOKEN_EOF, "EOF", line));
 	free(source);
 	return tokens;
 }

@@ -2,64 +2,68 @@
 #define STMT_H
 
 #include "ast.h"
-#include "scanner.h"
+#include "lexer.h"
+
+#define DEFAULT_STMTS_SIZE 512
+
 typedef enum {
-    STMT_BLOCK,
-    STMT_CLASS,
-    STMT_EXPR,
-    STMT_FUN,
-    STMT_IF,
-    STMT_PRINT,
-    STMT_VAR,
-    STMT_WHILE,
-    STMT_COUNT,
-} StmtType;
-typedef struct Stmt Stmt;
-struct Stmt{
-    StmtType type;
-    union {
-        struct {
-            Stmt **statements;
-        } block;
-        struct {
-            Token name;
-            Token superclass;
-            Stmt **methods;
-        } class;
-        struct {
-            Expr *expression;
-        } expr;
-        struct {
-            Token name;
-            TokenArray params;
-            Stmt **body;
-        } function;
-        struct {
-            Expr *condition;
-            Stmt *thenBranch;
-            Stmt *elseBranch;
-        } _if;
-        struct {
-            Expr *expression;
-        } print;
-        struct {
-            Token keyword;
-            Expr *value;
-        } _return;
-        struct {
-            Token name;
-            Expr *initializer;
-        } variable;
-        struct {
-            Expr *condition;
-            Stmt *body;
-        } _while;
-    } as;
-};
+	STMT_BLOCK,
+	STMT_CLASS,
+	STMT_EXPR,
+	STMT_FUN,
+	STMT_IF,
+	STMT_PRINT,
+	STMT_VAR,
+	STMT_WHILE,
+	STMT_COUNT,
+} stmt_type_t;
+
+typedef struct stmt_t {
+	stmt_type_t type;
+	union {
+		struct {
+			struct stmt_t **statements;
+		} block;
+		struct {
+			token_t name;
+			token_t superclass;
+			struct stmt_t **methods;
+		} class;
+		struct {
+			expr_t *expression;
+		} expr;
+		struct {
+			token_t name;
+			array_t *params;
+			struct stmt_t **body;
+		} function;
+		struct {
+			expr_t *condition;
+			struct stmt_t *thenBranch;
+			struct stmt_t *elseBranch;
+		} _if;
+		struct {
+			expr_t *expression;
+		} print;
+		struct {
+			token_t keyword;
+			expr_t *value;
+		} _return;
+		struct {
+			token_t name;
+			expr_t *initializer;
+		} variable;
+		struct {
+			expr_t *condition;
+			struct stmt_t *body;
+		} _while;
+	} as;
+} stmt_t;
+
 typedef struct {
-    Stmt *statements;
-    int count;
-    int capacity;
-    bool hadError;
-} StmtArray;
+	struct stmt_t *statements;
+	int length;
+	int capacity;
+} stmt_array_t;
+
 #endif 

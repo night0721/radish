@@ -11,21 +11,21 @@
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "Usage: rd tokenize|parse|evaluate <filename>\n");
+		fprintf(stderr, "Usage: rd tokenize|parse|evaluate|run <filename>\n");
 		return 1;
 	}
 
 	const char *command = argv[1];
-	
+
+	array_t *array = tokenize(argv[2]);
+	if (!array) {
+		return 1;
+	}
 	if (!strcmp(command, "tokenize")) {
-		array_t *array = tokenize(argv[2]);
-		if (array) {
-			print_tokens(array->tokens);
-			free_array(array);
-		}
+		print_tokens(array->tokens);
+		free_array(array);
 	} else if (!strcmp(command, "parse")) {
-		array_t *array = tokenize(argv[2]);
- 		expr_t *expr = parse(array->tokens);
+		expr_t *expr = parse_expr(array->tokens);
 		if (errno != 65) {
 			print_ast(expr);
 			printf("\n");
@@ -33,10 +33,18 @@ int main(int argc, char **argv)
 		free_array(array);
 		free_expr(expr);
 	} else if (!strcmp(command, "evaluate")) {
-		array_t *array = tokenize(argv[2]);
- 		expr_t *expr = parse(array->tokens);
+		expr_t *expr = parse_expr(array->tokens);
 		value_t val = evaluate(expr);
 		print_value(&val);
+		free_array(array);
+		free_expr(expr);
+	} else if (!strcmp(command, "run")) {
+		stmt_array_t *stmts = parse(array->tokens);
+		if (errno != 65) {
+			print_statements(stmts);
+			free_array(array);
+			free_statements(stmts);
+		}
 	} else {
 		fprintf(stderr, "Unknown command: %s\n", command);
 		return 1;

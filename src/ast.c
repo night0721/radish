@@ -5,29 +5,29 @@
 #include "ast.h"
 #include "lexer.h"
 
-expr_t *create_binary_expr(token_t *binary_op, expr_t *left, expr_t *right)
+expr_t *create_binary_expr(token_t *operator, expr_t *left, expr_t *right)
 {
 	expr_t *expr = malloc(sizeof(expr_t));
-	expr->type = BINARY;
-	expr->line = binary_op->line;
+	expr->type = EXPR_BINARY;
+	expr->line = operator->line;
 	expr->as.binary.left = left;
 	expr->as.binary.right = right;
-	expr->as.binary.binary_op.type = binary_op->type;
-	char *bin_op_val = strdup(binary_op->value);
-	expr->as.binary.binary_op.value = bin_op_val;
-	expr->as.binary.binary_op.line = binary_op->line;
+	expr->as.binary.operator.type = operator->type;
+	char *bin_op_val = strdup(operator->value);
+	expr->as.binary.operator.value = bin_op_val;
+	expr->as.binary.operator.line = operator->line;
 	return expr;
 }
 
-expr_t *create_unary_expr(token_t *unary_op, expr_t *right)
+expr_t *create_unary_expr(token_t *operator, expr_t *right)
 {
 	expr_t *expr = malloc(sizeof(expr_t));
-	expr->type = UNARY;
-	expr->line = unary_op->line;
-	expr->as.unary.unary_op.type = unary_op->type;
-	char *u_op_val = strdup(unary_op->value);
-	expr->as.unary.unary_op.value = u_op_val;
-	expr->as.unary.unary_op.line = unary_op->line;
+	expr->type = EXPR_UNARY;
+	expr->line = operator->line;
+	expr->as.unary.operator.type = operator->type;
+	char *u_op_val = strdup(operator->value);
+	expr->as.unary.operator.value = u_op_val;
+	expr->as.unary.operator.line = operator->line;
 	expr->as.unary.right = right;
 	return expr;
 }
@@ -35,28 +35,28 @@ expr_t *create_unary_expr(token_t *unary_op, expr_t *right)
 expr_t *create_literal_expr(token_t *token)
 {
 	expr_t *expr = malloc(sizeof(expr_t));
-	expr->type = LITERAL;
+	expr->type = EXPR_LITERAL;
 	expr->line = token->line;
 	switch (token->type) {
-		case NUMBER:
+		case TOKEN_NUMBER:
 			expr->as.literal.value.type = VAL_NUMBER;
 			double num;
 			sscanf(token->value, "%lf", &num);
 			expr->as.literal.value.as.number = num;
 			break;
 
-		case NIL:
+		case TOKEN_NIL:
 			expr->as.literal.value.type = VAL_NIL;
 			expr->as.literal.value.as.number = 0;
 			break;
 
-		case TRUE:
-		case FALSE:
+		case TOKEN_TRUE:
+		case TOKEN_FALSE:
 			expr->as.literal.value.type = VAL_BOOL;
-			expr->as.literal.value.as.boolean = token->type == TRUE;
+			expr->as.literal.value.as.boolean = token->type == TOKEN_TRUE;
 			break;
 
-		case STRING:
+		case TOKEN_STRING:
 			expr->as.literal.value.type = VAL_STRING;
 			char *tkvalue = strdup(token->value);
 			expr->as.literal.value.as.string = tkvalue;
@@ -74,7 +74,7 @@ expr_t *create_grouping_expr(expr_t *expression)
 		return NULL;
 	}
 	expr_t *expr = malloc(sizeof(expr_t));
-	expr->type = GROUPING;
+	expr->type = EXPR_GROUPING;
 	expr->line = expression->line;
 	expr->as.grouping.expression = expression;
 	return expr;
@@ -84,7 +84,7 @@ void print_ast(expr_t *expr)
 {
 	if (!expr)
 		return;
-	if (expr->type == LITERAL) {
+	if (expr->type == EXPR_LITERAL) {
 		switch (expr->as.literal.value.type) {
 			case VAL_BOOL:
 				printf("%s", expr->as.literal.value.as.boolean ? "true" : "false");
@@ -107,17 +107,17 @@ void print_ast(expr_t *expr)
 				printf("%s", expr->as.literal.value.as.string);
 				break;
 		}
-	} else if (expr->type == BINARY) {
-		printf("(%s ", expr->as.binary.binary_op.value);
+	} else if (expr->type == EXPR_BINARY) {
+		printf("(%s ", expr->as.binary.operator.value);
 		print_ast(expr->as.binary.left);
 		printf(" ");
 		print_ast(expr->as.binary.right);
 		printf(")");
-	} else if (expr->type == UNARY) {
-		printf("(%s ", expr->as.unary.unary_op.value);
+	} else if (expr->type == EXPR_UNARY) {
+		printf("(%s ", expr->as.unary.operator.value);
 		print_ast(expr->as.unary.right);
 		printf(")");
-	} else if (expr->type == GROUPING) {
+	} else if (expr->type == EXPR_GROUPING) {
 		printf("(group ");
 		print_ast(expr->as.grouping.expression);
 		printf(")");
