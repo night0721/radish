@@ -9,6 +9,7 @@
 int current = 0;
 token_t *tokens;
 expr_t *expression(void);
+void synchronize(void);
 
 void error(token_t *token, char *message)
 {
@@ -18,6 +19,7 @@ void error(token_t *token, char *message)
 		fprintf(stderr, "[line %d] at '%s': %s\n", token->line, token->value, message);
 	}
 	errno = 65;
+	synchronize();
 }
 
 void free_expr(expr_t *expr)
@@ -86,10 +88,13 @@ int check(token_type_t type)
 	}
 }
 
-void consume(token_type_t type, char *message) {
+token_t *consume(token_type_t type, char *message) {
 	if (!check(type)) {
 		error(peek(), message);
+	} else {
+		return peek();
 	}
+	return NULL;
 }
 
 expr_t *primary(void)
@@ -98,6 +103,11 @@ expr_t *primary(void)
 			check(TOKEN_NUMBER) || check(TOKEN_STRING)) {
 		return create_literal_expr(previous());
 	}
+
+	if (check(TOKEN_IDENTIFIER)) {
+		return create_variable_expr(previous());
+	}
+
 	if (check(TOKEN_LEFT_PAREN)) {
 		expr_t *expr = expression();
 		consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -203,6 +213,33 @@ stmt_t statement(void)
 	return expression_stmt();
 }
 
+stmt_t var_declaration(void)
+{
+	token_t *name = consume(TOKEN_IDENTIFIER, "Expect variable name.");
+
+	expr_t *initializer;
+	if (check(TOKEN_EQUAL)) {
+		initializer = expression();
+	}
+
+	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+	return (stmt_t) {
+		.type = STMT_VAR,
+		.as.variable.name.type = name->type,
+		.as.variable.name.value = name->value,
+		.as.variable.name.line = name->line,
+		.as.variable.initializer = initializer,
+	};
+}
+
+stmt_t declaration(void)
+{
+	if (check(TOKEN_VAR))
+		return var_declaration();
+
+	return statement();
+}
+
 void stmt_add(stmt_array_t *array, stmt_t stmt)
 {
 	if (array->length == array->capacity) {
@@ -237,7 +274,7 @@ stmt_array_t *parse(token_t *tks)
 		statements->length = 0;
 		statements->capacity = DEFAULT_STMTS_SIZE;
 		while (!end()) {
-			stmt_add(statements, statement());
+			stmt_add(statements, declaration());
 		}
 		return statements;
 	}

@@ -80,6 +80,19 @@ expr_t *create_grouping_expr(expr_t *expression)
 	return expr;
 }
 
+expr_t *create_variable_expr(token_t *name)
+{
+	expr_t *expr = malloc(sizeof(expr_t));
+	expr->type = EXPR_VARIABLE;
+	expr->line = name->line;
+	expr->as.variable.name.type = name->type;
+	char *name_val = strdup(name->value);
+	expr->as.variable.name.value = name_val;
+	expr->as.variable.name.line = name->line;
+
+	return expr;
+}
+
 void print_ast(expr_t *expr)
 {
 	if (!expr)

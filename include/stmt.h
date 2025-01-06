@@ -15,7 +15,6 @@ typedef enum {
 	STMT_PRINT,
 	STMT_VAR,
 	STMT_WHILE,
-	STMT_COUNT,
 } stmt_type_t;
 
 typedef struct stmt_t {

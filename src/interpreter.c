@@ -133,9 +133,10 @@ value_t visit_binary(expr_t *expr)
 	}
 
 	// String/number comparisons
-	if ((left.type == VAL_STRING && right.type == VAL_NUMBER) ||
-			(left.type == VAL_NUMBER && right.type == VAL_STRING)) {
+	if (left.type == VAL_STRING && right.type == VAL_NUMBER ||
+			left.type == VAL_NUMBER && right.type == VAL_STRING ) {
 		runtime_error("Operands must be numbers.", expr->line);
+
 	}
 
 	runtime_error("Operands must be two numbers or two strings.", expr->line);
@@ -238,9 +239,8 @@ void print_statement(stmt_t stmt)
 	if (stmt.type == STMT_PRINT) {
 		value_t obj = evaluate(stmt.as.print.expression);
 		print_value(&obj);
-/* 	} else if (stmt.type == STMT_EXPR) { */
-/* 		value_t obj = evaluate(stmt.as.expr.expression); */
-/* 		print_value(&obj); */
+	} else if (stmt.type == STMT_EXPR) {
+		evaluate(stmt.as.expr.expression);
 	}
 }
 void print_statements(stmt_array_t *array)
