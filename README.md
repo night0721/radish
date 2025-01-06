@@ -1,5 +1,6 @@
 # Radish
 Programming language.
+![Logo](https://github.com/user-attachments/assets/c0501ff4-5fc1-44d0-be89-43fc77765d83)
 
 # Usage
 ```sh
