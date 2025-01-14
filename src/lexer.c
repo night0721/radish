@@ -263,13 +263,7 @@ array_t *tokenize(char *filename)
 						int found = 0;
 						for (int i = 0; i < sizeof(reserved_keywords) / sizeof(reserved_keywords[0]); i++) {
 							if (strcmp(id, reserved_keywords[i].keyword) == 0) {
-								char upper_id[len + 1];
-								for (int i = 0; i < len; i++) {
-									upper_id[i] = toupper(id[i]);
-								}
-								upper_id[len] = 0;
 								token_add(tokens, token_gen(reserved_keywords[i].token_type, id, line));
-
 								found = 1;
 							}
 						}

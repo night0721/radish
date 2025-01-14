@@ -217,7 +217,7 @@ stmt_t var_declaration(void)
 {
 	token_t *name = consume(TOKEN_IDENTIFIER, "Expect variable name.");
 
-	expr_t *initializer;
+	expr_t *initializer = NULL;
 	if (check(TOKEN_EQUAL)) {
 		initializer = expression();
 	}

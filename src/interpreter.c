@@ -133,10 +133,9 @@ value_t visit_binary(expr_t *expr)
 	}
 
 	// String/number comparisons
-	if (left.type == VAL_STRING && right.type == VAL_NUMBER ||
-			left.type == VAL_NUMBER && right.type == VAL_STRING ) {
+	if ((left.type == VAL_STRING && right.type == VAL_NUMBER) ||
+			(left.type == VAL_NUMBER && right.type == VAL_STRING)) {
 		runtime_error("Operands must be numbers.", expr->line);
-
 	}
 
 	runtime_error("Operands must be two numbers or two strings.", expr->line);
