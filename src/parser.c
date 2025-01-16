@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #include "ast.h"
@@ -9,6 +10,7 @@
 int current = 0;
 token_t *tokens;
 expr_t *expression(void);
+stmt_t declaration(void);
 void synchronize(void);
 
 /*
@@ -56,13 +58,16 @@ void free_expr(expr_t *expr)
 			break;
 	
 		case EXPR_VARIABLE:
+			printf("hereR?\n");
 			free(expr->as.variable.name.value);
 			free(expr);
 			break;
 
 		case EXPR_ASSIGN:
-			free(expr->as.assign.name.value);
+			free_expr(expr->as.assign.name);
+			printf("hiiii\n");
 			free_expr(expr->as.assign.value);
+			free(expr);
 			break;
 
 		default:
@@ -212,8 +217,7 @@ expr_t *assignment(void)
 		expr_t *value = assignment();
 
 		if (expr->type == EXPR_VARIABLE) {
-			token_t name = expr->as.variable.name;
-			return create_assign_expr(&name, value);
+			return create_assign_expr(expr, value);
 		}
 		error(equals, "Invalid assignment target.");
 	}
@@ -226,6 +230,40 @@ expr_t *expression(void)
 	return assignment();
 }
 
+void stmt_add(stmt_array_t *array, stmt_t stmt)
+{
+	if (array->length == array->capacity) {
+		array->capacity *= 2;
+		array->statements = realloc(array->statements, array->capacity * sizeof(stmt_t));
+	}
+	array->statements[array->length++] = stmt;
+}
+
+void free_statements(stmt_array_t *array)
+{
+	for (int i = 0; i < array->length; i++) {
+		if (array->statements[i].type == STMT_PRINT) {
+			printf("this should go fifth\n");
+			free_expr(array->statements[i].as.print.expression);
+		}
+		if (array->statements[i].type == STMT_EXPR) {
+			printf("third\n");
+			free_expr(array->statements[i].as.expr.expression);
+		}
+		if (array->statements[i].type == STMT_VAR) {
+			printf("this should go second/forth\n");
+			free(array->statements[i].as.variable.name.value);
+			free_expr(array->statements[i].as.variable.initializer);
+		}
+		if (array->statements[i].type == STMT_BLOCK) {
+			printf("this should go first/third\n");
+			free_statements(array->statements[i].as.block.statements);
+		}
+	}
+	free(array->statements);
+	free(array);
+}
+
 stmt_t print_stmt(void)
 {
 	expr_t *value = expression();
@@ -233,6 +271,25 @@ stmt_t print_stmt(void)
 	return (stmt_t) {
 		.type = STMT_PRINT,
 		.as.print.expression = value,
+	};
+}
+
+stmt_t block_stmt(void)
+{
+	stmt_array_t *statements = malloc(sizeof(stmt_array_t));
+	statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
+	statements->length = 0;
+	statements->capacity = DEFAULT_STMTS_SIZE;
+
+
+    while (!check(TOKEN_RIGHT_BRACE) && !end()) {
+		stmt_add(statements, declaration());
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+    return (stmt_t) {
+		.type = STMT_BLOCK,
+		.as.block.statements = statements,
 	};
 }
 
@@ -252,6 +309,10 @@ stmt_t statement(void)
 		advance();
 		return print_stmt();
 	}
+	if (check(TOKEN_LEFT_BRACE)) {
+		advance();
+		return block_stmt();
+	}
 	return expression_stmt();
 }
 
@@ -269,7 +330,7 @@ stmt_t var_declaration(void)
 	return (stmt_t) {
 		.type = STMT_VAR,
 		.as.variable.name.type = name->type,
-		.as.variable.name.value = name->value,
+		.as.variable.name.value = strdup(name->value),
 		.as.variable.name.line = name->line,
 		.as.variable.initializer = initializer,
 	};
@@ -283,32 +344,6 @@ stmt_t declaration(void)
 	}
 
 	return statement();
-}
-
-void stmt_add(stmt_array_t *array, stmt_t stmt)
-{
-	if (array->length == array->capacity) {
-		array->capacity *= 2;
-		array->statements = realloc(array->statements, array->capacity * sizeof(stmt_t));
-	}
-	array->statements[array->length++] = stmt;
-}
-
-void free_statements(stmt_array_t *array)
-{
-	for (int i = 0; i < array->length; i++) {
-		if (array->statements[i].type == STMT_PRINT) {
-			free_expr(array->statements[i].as.print.expression);
-		}
-		if (array->statements[i].type == STMT_EXPR) {
-			free_expr(array->statements[i].as.expr.expression);
-		}
-		if (array->statements[i].type == STMT_VAR) {
-			free_expr(array->statements[i].as.variable.initializer);
-		}
-	}
-	free(array->statements);
-	free(array);
 }
 
 stmt_array_t *parse(token_t *tks)

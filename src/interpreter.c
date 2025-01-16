@@ -7,17 +7,16 @@
 #include "env.h"
 #include "interpreter.h"
 #include "lexer.h"
-
-ht_t *ht;
+#include "parser.h"
 
 value_t visit_literal(expr_t *expr)
 {
 	return expr->as.literal.value;
 }
 
-value_t visit_grouping(expr_t *expr)
+value_t visit_grouping(expr_t *expr, ht_t *env)
 {
-	return evaluate(expr->as.grouping.expression);
+	return evaluate(expr->as.grouping.expression, env);
 }
 
 void runtime_error(const char *message, int line)
@@ -27,11 +26,11 @@ void runtime_error(const char *message, int line)
 	exit(70);
 }
 
-value_t visit_binary(expr_t *expr)
+value_t visit_binary(expr_t *expr, ht_t *env)
 {
 	token_type_t op_type = expr->as.binary.operator.type;
-	value_t right = evaluate(expr->as.binary.right);
-	value_t left = evaluate(expr->as.binary.left);
+	value_t right = evaluate(expr->as.binary.right, env);
+	value_t left = evaluate(expr->as.binary.left, env);
 
 	// Arithmetic
 	if (left.type == VAL_NUMBER && right.type == VAL_NUMBER) {
@@ -163,9 +162,9 @@ int is_truthy(value_t *value)
 	}
 }
 
-value_t visit_unary(expr_t *expr)
+value_t visit_unary(expr_t *expr, ht_t *env)
 {
-	value_t operand = evaluate(expr->as.unary.right);
+	value_t operand = evaluate(expr->as.unary.right, env);
 
 	if (expr->as.unary.operator.type == TOKEN_MINUS) {
 		if (operand.type == VAL_NUMBER) {
@@ -182,9 +181,9 @@ value_t visit_unary(expr_t *expr)
 	return (value_t){.type = VAL_NIL};
 }
 
-value_t visit_variable(expr_t *expr)
+value_t visit_variable(expr_t *expr, ht_t *env)
 {
-	value_t *val = ht_get(ht, &expr->as.variable.name);
+	value_t *val = ht_get(env, &expr->as.variable.name, 1);
 	if (val) {
 		return *val;
 	} else {
@@ -192,14 +191,14 @@ value_t visit_variable(expr_t *expr)
 	}
 }
 
-value_t visit_assign(expr_t *expr)
+value_t visit_assign(expr_t *expr, ht_t *env)
 {
-	value_t value = evaluate(expr->as.assign.value);
-	ht_assign(ht, &expr->as.assign.name, value);
+	value_t value = evaluate(expr->as.assign.value, env);
+	ht_assign(env, &expr->as.assign.name->as.variable.name, value);
     return value;
 }
 
-value_t evaluate(expr_t *expr)
+value_t evaluate(expr_t *expr, ht_t *env)
 {
 	if (!expr) {
 		value_t nil_value = {.type = VAL_NIL };
@@ -209,15 +208,15 @@ value_t evaluate(expr_t *expr)
 		case EXPR_LITERAL:
 			return visit_literal(expr);
 		case EXPR_BINARY:
-			return visit_binary(expr);
+			return visit_binary(expr, env);
 		case EXPR_UNARY:
-			return visit_unary(expr);
+			return visit_unary(expr, env);
 		case EXPR_GROUPING:
-			return visit_grouping(expr);
+			return visit_grouping(expr, env);
 		case EXPR_VARIABLE:
-			return visit_variable(expr);
+			return visit_variable(expr, env);
 		case EXPR_ASSIGN:
-			return visit_assign(expr);
+			return visit_assign(expr, env);
 		default:
 			exit(65);
 			break;
@@ -252,26 +251,47 @@ void print_value(value_t *value)
 	}
 }
 
-void print_statement(stmt_t stmt)
+void evaluate_block(stmt_array_t *array, ht_t *cur_env, ht_t *scope_env)
 {
-	if (stmt.type == STMT_PRINT) {
-		value_t obj = evaluate(stmt.as.print.expression);
-		print_value(&obj);
-	} else if (stmt.type == STMT_EXPR) {
-		evaluate(stmt.as.expr.expression);
-	} else if (stmt.type == STMT_VAR) {
-		value_t value = {.type = VAL_NIL};
-		if (stmt.as.variable.initializer) {
-			value = evaluate(stmt.as.variable.initializer);
-		}
-		ht_add(ht, stmt.as.variable.name.value, value);
+	ht_t *previous = cur_env;
+	cur_env = scope_env;
+	evaluate_statements(array, cur_env);
+	ht_free(scope_env);
+	cur_env = previous;
+}
+
+void evaluate_statement(stmt_t stmt, ht_t *env)
+{
+	switch (stmt.type) {
+		case STMT_PRINT:;
+			value_t obj = evaluate(stmt.as.print.expression, env);
+			print_value(&obj);
+			break;
+
+		case STMT_EXPR:
+			evaluate(stmt.as.expr.expression, env);
+			break;
+
+		case STMT_VAR:;
+			value_t value = {.type = VAL_NIL};
+			if (stmt.as.variable.initializer) {
+				value = evaluate(stmt.as.variable.initializer, env);
+			}
+			ht_add(env, stmt.as.variable.name.value, value);
+			break;
+
+		case STMT_BLOCK:
+			evaluate_block(stmt.as.block.statements, env, ht_init(env));
+			break;
+
+		default:
+			break;
 	}
 }
 
-void print_statements(stmt_array_t *array)
+void evaluate_statements(stmt_array_t *array, ht_t *env)
 {
-	ht = ht_init();
 	for (int i = 0; i < array->length; i++) {
-		print_statement(array->statements[i]);
+		evaluate_statement(array->statements[i], env);
 	}
 }

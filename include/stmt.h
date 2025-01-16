@@ -7,11 +7,10 @@
 #define DEFAULT_STMTS_SIZE 512
 
 /*
- program        → statement* EOF ;
- statement      → exprStmt | printStmt ;
- exprStmt       → expression ";" ;
- printStmt      → "print" expression ";" ;
+ statement      → exprStmt | printStmt | block ;
+ block          → "{" declaration* "}" ;
 */
+
 typedef enum {
 	STMT_BLOCK,
 	STMT_CLASS,
@@ -23,11 +22,19 @@ typedef enum {
 	STMT_WHILE,
 } stmt_type_t;
 
+typedef struct stmt_t stmt_t;
+
+typedef struct {
+	struct stmt_t *statements;
+	int length;
+	int capacity;
+} stmt_array_t;
+
 typedef struct stmt_t {
 	stmt_type_t type;
 	union {
 		struct {
-			struct stmt_t **statements;
+			stmt_array_t *statements;
 		} block;
 		struct {
 			token_t name;
@@ -64,11 +71,5 @@ typedef struct stmt_t {
 		} _while;
 	} as;
 } stmt_t;
-
-typedef struct {
-	struct stmt_t *statements;
-	int length;
-	int capacity;
-} stmt_array_t;
 
 #endif 
