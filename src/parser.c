@@ -58,14 +58,12 @@ void free_expr(expr_t *expr)
 			break;
 	
 		case EXPR_VARIABLE:
-			printf("hereR?\n");
 			free(expr->as.variable.name.value);
 			free(expr);
 			break;
 
 		case EXPR_ASSIGN:
 			free_expr(expr->as.assign.name);
-			printf("hiiii\n");
 			free_expr(expr->as.assign.value);
 			free(expr);
 			break;
@@ -243,20 +241,16 @@ void free_statements(stmt_array_t *array)
 {
 	for (int i = 0; i < array->length; i++) {
 		if (array->statements[i].type == STMT_PRINT) {
-			printf("this should go fifth\n");
 			free_expr(array->statements[i].as.print.expression);
 		}
 		if (array->statements[i].type == STMT_EXPR) {
-			printf("third\n");
 			free_expr(array->statements[i].as.expr.expression);
 		}
 		if (array->statements[i].type == STMT_VAR) {
-			printf("this should go second/forth\n");
 			free(array->statements[i].as.variable.name.value);
 			free_expr(array->statements[i].as.variable.initializer);
 		}
 		if (array->statements[i].type == STMT_BLOCK) {
-			printf("this should go first/third\n");
 			free_statements(array->statements[i].as.block.statements);
 		}
 	}

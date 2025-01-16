@@ -25,12 +25,12 @@ typedef enum {
 typedef struct stmt_t stmt_t;
 
 typedef struct {
-	struct stmt_t *statements;
+	stmt_t *statements;
 	int length;
 	int capacity;
 } stmt_array_t;
 
-typedef struct stmt_t {
+struct stmt_t {
 	stmt_type_t type;
 	union {
 		struct {
@@ -70,6 +70,6 @@ typedef struct stmt_t {
 			struct stmt_t *body;
 		} _while;
 	} as;
-} stmt_t;
+};
 
 #endif 
