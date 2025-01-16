@@ -4,13 +4,11 @@
 #include <errno.h>
 
 #include "ast.h"
+#include "env.h"
 #include "interpreter.h"
 #include "lexer.h"
 
-value_t visit_literal(expr_t *expr);
-value_t visit_grouping(expr_t *expr);
-value_t visit_binary(expr_t *expr);
-value_t visit_unary(expr_t *expr);
+ht_t *ht;
 
 value_t visit_literal(expr_t *expr)
 {
@@ -184,6 +182,23 @@ value_t visit_unary(expr_t *expr)
 	return (value_t){.type = VAL_NIL};
 }
 
+value_t visit_variable(expr_t *expr)
+{
+	value_t *val = ht_get(ht, &expr->as.variable.name);
+	if (val) {
+		return *val;
+	} else {
+		return (value_t) {.type = VAL_NIL};
+	}
+}
+
+value_t visit_assign(expr_t *expr)
+{
+	value_t value = evaluate(expr->as.assign.value);
+	ht_assign(ht, &expr->as.assign.name, value);
+    return value;
+}
+
 value_t evaluate(expr_t *expr)
 {
 	if (!expr) {
@@ -199,6 +214,10 @@ value_t evaluate(expr_t *expr)
 			return visit_unary(expr);
 		case EXPR_GROUPING:
 			return visit_grouping(expr);
+		case EXPR_VARIABLE:
+			return visit_variable(expr);
+		case EXPR_ASSIGN:
+			return visit_assign(expr);
 		default:
 			exit(65);
 			break;
@@ -240,10 +259,18 @@ void print_statement(stmt_t stmt)
 		print_value(&obj);
 	} else if (stmt.type == STMT_EXPR) {
 		evaluate(stmt.as.expr.expression);
+	} else if (stmt.type == STMT_VAR) {
+		value_t value = {.type = VAL_NIL};
+		if (stmt.as.variable.initializer) {
+			value = evaluate(stmt.as.variable.initializer);
+		}
+		ht_add(ht, stmt.as.variable.name.value, value);
 	}
 }
+
 void print_statements(stmt_array_t *array)
 {
+	ht = ht_init();
 	for (int i = 0; i < array->length; i++) {
 		print_statement(array->statements[i]);
 	}

@@ -6,6 +6,12 @@
 
 #define DEFAULT_STMTS_SIZE 512
 
+/*
+ program        → statement* EOF ;
+ statement      → exprStmt | printStmt ;
+ exprStmt       → expression ";" ;
+ printStmt      → "print" expression ";" ;
+*/
 typedef enum {
 	STMT_BLOCK,
 	STMT_CLASS,

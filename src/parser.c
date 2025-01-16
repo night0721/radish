@@ -11,6 +11,9 @@ token_t *tokens;
 expr_t *expression(void);
 void synchronize(void);
 
+/*
+ * Syntax error
+ */
 void error(token_t *token, char *message)
 {
 	if (token->type == TOKEN_EOF) {
@@ -51,6 +54,16 @@ void free_expr(expr_t *expr)
 			}
 			free(expr);
 			break;
+	
+		case EXPR_VARIABLE:
+			free(expr->as.variable.name.value);
+			free(expr);
+			break;
+
+		case EXPR_ASSIGN:
+			free(expr->as.assign.name.value);
+			free_expr(expr->as.assign.value);
+			break;
 
 		default:
 			break;
@@ -80,19 +93,17 @@ void advance(void)
 
 int check(token_type_t type)
 {
-	if (tokens[current].type == type) {
-		advance();
-		return 1;
-	} else {
-		return 0;
-	}
+	return tokens[current].type == type;
 }
 
-token_t *consume(token_type_t type, char *message) {
+token_t *consume(token_type_t type, char *message)
+{
 	if (!check(type)) {
 		error(peek(), message);
 	} else {
-		return peek();
+		token_t *tok = peek();
+		advance();
+		return tok;
 	}
 	return NULL;
 }
@@ -101,14 +112,19 @@ expr_t *primary(void)
 {
 	if (check(TOKEN_FALSE) || check(TOKEN_TRUE) || check(TOKEN_NIL) ||
 			check(TOKEN_NUMBER) || check(TOKEN_STRING)) {
-		return create_literal_expr(previous());
+		token_t *tok = peek();
+		advance();
+		return create_literal_expr(tok);
 	}
 
 	if (check(TOKEN_IDENTIFIER)) {
-		return create_variable_expr(previous());
+		token_t *tok = peek();
+		advance();
+		return create_variable_expr(tok);
 	}
 
 	if (check(TOKEN_LEFT_PAREN)) {
+		advance();
 		expr_t *expr = expression();
 		consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 		return create_grouping_expr(expr);
@@ -120,7 +136,8 @@ expr_t *primary(void)
 expr_t *unary(void)
 {
 	if (check(TOKEN_BANG) || check(TOKEN_MINUS)) {
-		token_t *operator = previous();
+		token_t *operator = peek();
+		advance();
 		expr_t *right = unary();
 		return create_unary_expr(operator, right);
 	}
@@ -133,7 +150,8 @@ expr_t *factor(void)
 	expr_t *expr = unary();
 
 	while (check(TOKEN_SLASH) || check(TOKEN_STAR)) {
-		token_t *operator = previous();
+		token_t *operator = peek();
+		advance();
 		expr_t *right = unary();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -146,7 +164,8 @@ expr_t *term(void)
 	expr_t *expr = factor();
 
 	while (check(TOKEN_MINUS) || check(TOKEN_PLUS)) {
-		token_t *operator = previous();
+		token_t *operator = peek();
+		advance();
 		expr_t *right = factor();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -160,7 +179,8 @@ expr_t *comparison(void)
 
 	while (check(TOKEN_GREATER) || check(TOKEN_GREATER_EQUAL) || check(TOKEN_LESS)
 			|| check(TOKEN_LESS_EQUAL)) {
-		token_t *operator = previous();
+		token_t *operator = peek();
+		advance();
 		expr_t *right = term();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -173,7 +193,8 @@ expr_t *equality(void)
 	expr_t *expr = comparison();
 
 	while (check(TOKEN_BANG_EQUAL) || check(TOKEN_EQUAL_EQUAL)) {
-		token_t *operator = previous();
+		token_t *operator = peek();
+		advance();
 		expr_t *right = comparison();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -181,9 +202,28 @@ expr_t *equality(void)
 	return expr;
 }
 
+expr_t *assignment(void)
+{
+	expr_t *expr = equality();
+
+	if (check(TOKEN_EQUAL)) {
+		token_t *equals = peek();
+		advance();
+		expr_t *value = assignment();
+
+		if (expr->type == EXPR_VARIABLE) {
+			token_t name = expr->as.variable.name;
+			return create_assign_expr(&name, value);
+		}
+		error(equals, "Invalid assignment target.");
+	}
+
+    return expr;
+}
+
 expr_t *expression(void)
 {
-	return equality();
+	return assignment();
 }
 
 stmt_t print_stmt(void)
@@ -208,8 +248,10 @@ stmt_t expression_stmt(void)
 
 stmt_t statement(void)
 {
-	if (check(TOKEN_PRINT))
+	if (check(TOKEN_PRINT)) {
+		advance();
 		return print_stmt();
+	}
 	return expression_stmt();
 }
 
@@ -219,6 +261,7 @@ stmt_t var_declaration(void)
 
 	expr_t *initializer = NULL;
 	if (check(TOKEN_EQUAL)) {
+		advance();
 		initializer = expression();
 	}
 
@@ -234,8 +277,10 @@ stmt_t var_declaration(void)
 
 stmt_t declaration(void)
 {
-	if (check(TOKEN_VAR))
+	if (check(TOKEN_VAR)) {
+		advance();
 		return var_declaration();
+	}
 
 	return statement();
 }
@@ -257,6 +302,9 @@ void free_statements(stmt_array_t *array)
 		}
 		if (array->statements[i].type == STMT_EXPR) {
 			free_expr(array->statements[i].as.expr.expression);
+		}
+		if (array->statements[i].type == STMT_VAR) {
+			free_expr(array->statements[i].as.variable.initializer);
 		}
 	}
 	free(array->statements);

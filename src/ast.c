@@ -93,6 +93,19 @@ expr_t *create_variable_expr(token_t *name)
 	return expr;
 }
 
+expr_t *create_assign_expr(token_t *name, expr_t *value)
+{
+	expr_t *expr = malloc(sizeof(expr_t));
+	expr->type = EXPR_ASSIGN;
+	expr->line = name->line;
+	expr->as.assign.name.type = name->type;
+	expr->as.assign.name.value = name->value;
+	expr->as.assign.name.line = name->line;
+	expr->as.assign.value = value;
+
+	return expr;
+}
+
 void print_ast(expr_t *expr)
 {
 	if (!expr)

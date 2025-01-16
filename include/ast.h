@@ -103,6 +103,7 @@ expr_t *create_unary_expr(token_t *operator, expr_t *right);
 expr_t *create_literal_expr(token_t *token);
 expr_t *create_grouping_expr(expr_t *expression);
 expr_t *create_variable_expr(token_t *name);
+expr_t *create_assign_expr(token_t *name, expr_t *value);
 void print_ast(expr_t *expr);
 
 #endif
