@@ -140,17 +140,17 @@ value_t visit_binary(expr_t *expr, ht_t *env)
 
 }
 
-int is_truthy(value_t *value)
+int is_truthy(value_t value)
 {
-	switch (value->type) {
+	switch (value.type) {
 		case VAL_NIL:
 			return 0;
 
 		case VAL_BOOL:
-			return value->as.boolean;
+			return value.as.boolean;
 
 		case VAL_NUMBER:
-			if (value->as.number == 0)
+			if (value.as.number == 0)
 				return 0;
 			return 1;
 
@@ -174,7 +174,7 @@ value_t visit_unary(expr_t *expr, ht_t *env)
 			runtime_error("Operand must be a number.", expr->line);
 		}
 	} else if (expr->as.unary.operator.type == TOKEN_BANG) {
-		value_t result = {.type = VAL_BOOL, .as.boolean = !is_truthy(&operand)};
+		value_t result = {.type = VAL_BOOL, .as.boolean = !is_truthy(operand)};
 		return result;
 	}
 
@@ -198,6 +198,21 @@ value_t visit_assign(expr_t *expr, ht_t *env)
     return value;
 }
 
+value_t visit_logical(expr_t *expr, ht_t *env)
+{
+	value_t left = evaluate(expr->as.logical.left, env);
+
+    if (expr->as.logical.operator.type == TOKEN_OR) {
+      if (is_truthy(left))
+		  return left;
+    } else {
+      if (!is_truthy(left))
+		  return left;
+    }
+
+    return evaluate(expr->as.logical.right, env);
+}
+
 value_t evaluate(expr_t *expr, ht_t *env)
 {
 	if (!expr) {
@@ -217,17 +232,19 @@ value_t evaluate(expr_t *expr, ht_t *env)
 			return visit_variable(expr, env);
 		case EXPR_ASSIGN:
 			return visit_assign(expr, env);
+		case EXPR_LOGICAL:
+			return visit_logical(expr, env);
 		default:
 			exit(65);
 			break;
 	}
 }
 
-void print_value(value_t *value)
+void print_value(value_t value)
 {
-	switch (value->type) {
+	switch (value.type) {
 		case VAL_BOOL:
-			printf("%s\n", value->as.boolean == 1 ? "true" : "false");
+			printf("%s\n", value.as.boolean == 1 ? "true" : "false");
 			break;
 
 		case VAL_NIL:
@@ -235,14 +252,14 @@ void print_value(value_t *value)
 			break;
 
 		case VAL_STRING:
-			printf("%s\n", value->as.string);
+			printf("%s\n", value.as.string);
 			break;
 
 		case VAL_NUMBER:
-			if (value->as.number == (int) value->as.number) {
-				printf("%d\n", (int) value->as.number);
+			if (value.as.number == (int) value.as.number) {
+				printf("%d\n", (int) value.as.number);
 			} else {
-				printf("%g\n", value->as.number);
+				printf("%g\n", value.as.number);
 			}
 			break;
 
@@ -260,28 +277,42 @@ void evaluate_block(stmt_array_t *array, ht_t *cur_env, ht_t *scope_env)
 	cur_env = previous;
 }
 
-void evaluate_statement(stmt_t stmt, ht_t *env)
+void evaluate_statement(stmt_t *stmt, ht_t *env)
 {
-	switch (stmt.type) {
-		case STMT_PRINT:;
-			value_t obj = evaluate(stmt.as.print.expression, env);
-			print_value(&obj);
+	switch (stmt->type) {
+		case STMT_IF:
+			if (is_truthy(evaluate(stmt->as._if.condition, env))) {
+				evaluate_statement(stmt->as._if.then_branch, env);
+			} else if (stmt->as._if.else_branch) {
+				evaluate_statement(stmt->as._if.else_branch, env);
+			}
+			break;
+
+		case STMT_PRINT:
+			print_value(evaluate(stmt->as.print.expression, env));
 			break;
 
 		case STMT_EXPR:
-			evaluate(stmt.as.expr.expression, env);
+			evaluate(stmt->as.expr.expression, env);
 			break;
 
-		case STMT_VAR:;
+		case STMT_VAR: {
 			value_t value = {.type = VAL_NIL};
-			if (stmt.as.variable.initializer) {
-				value = evaluate(stmt.as.variable.initializer, env);
+			if (stmt->as.variable.initializer) {
+				value = evaluate(stmt->as.variable.initializer, env);
 			}
-			ht_add(env, stmt.as.variable.name.value, value);
+			ht_add(env, stmt->as.variable.name.value, value);
 			break;
+		}
 
 		case STMT_BLOCK:
-			evaluate_block(stmt.as.block.statements, env, ht_init(env));
+			evaluate_block(stmt->as.block.statements, env, ht_init(env));
+			break;
+
+		case STMT_WHILE:
+			while (is_truthy(evaluate(stmt->as._while.condition, env))) {
+				evaluate_statement(stmt->as._while.body, env);
+			}
 			break;
 
 		default:

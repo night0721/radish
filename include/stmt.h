@@ -7,7 +7,9 @@
 #define DEFAULT_STMTS_SIZE 512
 
 /*
- statement      → exprStmt | printStmt | block ;
+statement      → exprStmt | ifStmt | printStmt | block ;
+ifStmt         → "if" "(" expression ")" statement
+               ( "else" statement )? ;
  block          → "{" declaration* "}" ;
 */
 
@@ -25,7 +27,7 @@ typedef enum {
 typedef struct stmt_t stmt_t;
 
 typedef struct {
-	stmt_t *statements;
+	stmt_t **statements;
 	int length;
 	int capacity;
 } stmt_array_t;
@@ -51,8 +53,8 @@ struct stmt_t {
 		} function;
 		struct {
 			expr_t *condition;
-			struct stmt_t *thenBranch;
-			struct stmt_t *elseBranch;
+			struct stmt_t *then_branch;
+			struct stmt_t *else_branch;
 		} _if;
 		struct {
 			expr_t *expression;

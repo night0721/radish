@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 	} else if (!strcmp(command, "evaluate")) {
 		expr_t *expr = parse_expr(array->tokens);
 		value_t val = evaluate(expr, NULL);
-		print_value(&val);
+		print_value(val);
 		free_array(array);
 		free_expr(expr);
 	} else if (!strcmp(command, "run")) {

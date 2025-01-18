@@ -84,12 +84,13 @@ void ht_replace(ht_t *ht, char *name, value_t value)
 			break;
 		}
 		if (!strcmp(ht[probe_idx].name, name)) {
-			ht[probe_idx].value.type = value.type;
-			if (value.type == VAL_STRING) {
+			if (ht[probe_idx].value.type == VAL_STRING) {
 				free(ht[probe_idx].value.as.string);
+			}
+			ht[probe_idx].value.type = value.type;
+			ht[probe_idx].value.as = value.as;
+			if (value.type == VAL_STRING) {
 				ht[probe_idx].value.as.string = strdup(value.as.string);
-			} else {
-				ht[probe_idx].value.as = value.as;
 			}
 			return;
 		}

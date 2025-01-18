@@ -13,8 +13,7 @@ expr_t *create_binary_expr(token_t *operator, expr_t *left, expr_t *right)
 	expr->as.binary.left = left;
 	expr->as.binary.right = right;
 	expr->as.binary.operator.type = operator->type;
-	char *bin_op_val = strdup(operator->value);
-	expr->as.binary.operator.value = bin_op_val;
+	expr->as.binary.operator.value = strdup(operator->value);
 	expr->as.binary.operator.line = operator->line;
 	return expr;
 }
@@ -25,8 +24,7 @@ expr_t *create_unary_expr(token_t *operator, expr_t *right)
 	expr->type = EXPR_UNARY;
 	expr->line = operator->line;
 	expr->as.unary.operator.type = operator->type;
-	char *u_op_val = strdup(operator->value);
-	expr->as.unary.operator.value = u_op_val;
+	expr->as.unary.operator.value = strdup(operator->value);
 	expr->as.unary.operator.line = operator->line;
 	expr->as.unary.right = right;
 	return expr;
@@ -58,8 +56,7 @@ expr_t *create_literal_expr(token_t *token)
 
 		case TOKEN_STRING:
 			expr->as.literal.value.type = VAL_STRING;
-			char *tkvalue = strdup(token->value);
-			expr->as.literal.value.as.string = tkvalue;
+			expr->as.literal.value.as.string = strdup(token->value);
 			break;
 
 		default:
@@ -86,8 +83,7 @@ expr_t *create_variable_expr(token_t *name)
 	expr->type = EXPR_VARIABLE;
 	expr->line = name->line;
 	expr->as.variable.name.type = name->type;
-	char *name_val = strdup(name->value);
-	expr->as.variable.name.value = name_val;
+	expr->as.variable.name.value = strdup(name->value);
 	expr->as.variable.name.line = name->line;
 
 	return expr;
@@ -101,6 +97,19 @@ expr_t *create_assign_expr(expr_t *name, expr_t *value)
 	expr->as.assign.name =  name;
 	expr->as.assign.value = value;
 
+	return expr;
+}
+
+expr_t *create_logical_expr(token_t *operator, expr_t *left, expr_t *right)
+{
+	expr_t *expr = malloc(sizeof(expr_t));
+	expr->type = EXPR_LOGICAL;
+	expr->line = operator->line;
+	expr->as.logical.left = left;
+	expr->as.logical.right = right;
+	expr->as.logical.operator.type = operator->type;
+	expr->as.logical.operator.value = strdup(operator->value);
+	expr->as.logical.operator.line = operator->line;
 	return expr;
 }
 

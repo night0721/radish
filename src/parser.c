@@ -10,7 +10,10 @@
 int current = 0;
 token_t *tokens;
 expr_t *expression(void);
-stmt_t declaration(void);
+stmt_t *expression_stmt(void);
+stmt_t *statement(void);
+stmt_t *var_declaration(void);
+stmt_t *declaration(void);
 void synchronize(void);
 
 /*
@@ -65,6 +68,13 @@ void free_expr(expr_t *expr)
 		case EXPR_ASSIGN:
 			free_expr(expr->as.assign.name);
 			free_expr(expr->as.assign.value);
+			free(expr);
+			break;
+
+		case EXPR_LOGICAL:
+			free(expr->as.logical.operator.value);
+			free_expr(expr->as.logical.left);
+			free_expr(expr->as.logical.right);
 			free(expr);
 			break;
 
@@ -205,9 +215,37 @@ expr_t *equality(void)
 	return expr;
 }
 
-expr_t *assignment(void)
+expr_t *and(void)
 {
 	expr_t *expr = equality();
+
+    while (check(TOKEN_AND)) {
+		token_t *operator = peek();
+		advance();
+		expr_t *right = equality();
+		expr = create_logical_expr(operator, expr, right);
+    }
+
+    return expr;
+}
+
+expr_t *or(void)
+{
+	expr_t *expr = and();
+
+    while (check(TOKEN_OR)) {
+		token_t *operator = peek();
+		advance();
+		expr_t *right = and();
+		expr = create_logical_expr(operator, expr, right);
+    }
+
+    return expr;
+}
+
+expr_t *assignment(void)
+{
+	expr_t *expr = or();
 
 	if (check(TOKEN_EQUAL)) {
 		token_t *equals = peek();
@@ -228,47 +266,170 @@ expr_t *expression(void)
 	return assignment();
 }
 
-void stmt_add(stmt_array_t *array, stmt_t stmt)
+void stmt_add(stmt_array_t *array, stmt_t *stmt)
 {
 	if (array->length == array->capacity) {
 		array->capacity *= 2;
-		array->statements = realloc(array->statements, array->capacity * sizeof(stmt_t));
+		array->statements = realloc(array->statements, array->capacity * sizeof(stmt_t *));
 	}
 	array->statements[array->length++] = stmt;
+}
+
+void free_statement(stmt_t *stmt)
+{
+	if (!stmt) {
+		return;
+	}
+	if (stmt->type == STMT_PRINT) {
+		free_expr(stmt->as.print.expression);
+		free(stmt);
+	} else if (stmt->type == STMT_EXPR) {
+		free_expr(stmt->as.expr.expression);
+		free(stmt);
+	} else if (stmt->type == STMT_VAR) {
+		free(stmt->as.variable.name.value);
+		free_expr(stmt->as.variable.initializer);
+		free(stmt);
+	} else if (stmt->type == STMT_BLOCK) {
+		free_statements(stmt->as.block.statements);
+		free(stmt);
+	} else if (stmt->type == STMT_IF) {
+		free_expr(stmt->as._if.condition);
+		free_statement(stmt->as._if.then_branch);
+		free_statement(stmt->as._if.else_branch);
+		free(stmt);
+	} else if (stmt->type == STMT_WHILE) {
+		free_expr(stmt->as._while.condition);
+		free_statement(stmt->as._while.body);
+		free(stmt);
+	}
 }
 
 void free_statements(stmt_array_t *array)
 {
 	for (int i = 0; i < array->length; i++) {
-		if (array->statements[i].type == STMT_PRINT) {
-			free_expr(array->statements[i].as.print.expression);
-		}
-		if (array->statements[i].type == STMT_EXPR) {
-			free_expr(array->statements[i].as.expr.expression);
-		}
-		if (array->statements[i].type == STMT_VAR) {
-			free(array->statements[i].as.variable.name.value);
-			free_expr(array->statements[i].as.variable.initializer);
-		}
-		if (array->statements[i].type == STMT_BLOCK) {
-			free_statements(array->statements[i].as.block.statements);
-		}
+		free_statement(array->statements[i]);
 	}
 	free(array->statements);
 	free(array);
 }
 
-stmt_t print_stmt(void)
+stmt_t *for_stmt(void)
+{
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+	stmt_t *initializer = NULL;
+    if (check(TOKEN_SEMICOLON)) {
+		advance();
+    } else if (check(TOKEN_VAR)) {
+		advance();
+		initializer = var_declaration();
+    } else {
+		initializer = expression_stmt();
+	}
+
+	expr_t *condition = NULL;
+    if (!check(TOKEN_SEMICOLON)) {
+		condition = expression();
+    }
+    consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+	expr_t *increment = NULL;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+		increment = expression();
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+	stmt_t *body = statement();
+	if (increment) {
+		stmt_t *body_incremented = malloc(sizeof(stmt_t));
+		body_incremented->type = STMT_BLOCK;
+		stmt_array_t *statements = malloc(sizeof(stmt_array_t));
+		statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
+		statements->length = 0;
+		statements->capacity = DEFAULT_STMTS_SIZE;
+		stmt_add(statements, body);
+		body_incremented->as.block.statements = statements;
+
+		stmt_t *stmt = malloc(sizeof(stmt_t));
+		stmt->type = STMT_EXPR;
+		stmt->as.expr.expression = increment;
+		stmt_add(statements, stmt);
+		body = body_incremented;
+    }
+	if (!condition) {
+		token_t tok;
+		tok.type = TOKEN_TRUE;
+		tok.value = strdup("true");
+		tok.line = -1;
+		condition = create_literal_expr(&tok);
+	}
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_WHILE;
+	stmt->as._while.condition = condition;
+	stmt->as._while.body = body;
+
+	body = stmt;
+
+	if (initializer) {
+		stmt_t *body_initialized = malloc(sizeof(stmt_t));
+		body_initialized->type = STMT_BLOCK;
+		stmt_array_t *statements = malloc(sizeof(stmt_array_t));
+		statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
+		statements->length = 0;
+		statements->capacity = DEFAULT_STMTS_SIZE;
+		stmt_add(statements, initializer);
+		stmt_add(statements, body);
+		body_initialized->as.block.statements = statements;
+		body = body_initialized;
+    }
+
+    return body;
+}
+
+stmt_t *if_stmt(void)
+{
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+	expr_t *cond = expression();
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after if condition.");
+	stmt_t *then_branch = statement();
+    stmt_t *else_branch = NULL;
+    if (check(TOKEN_ELSE)) {
+		advance();
+		else_branch = statement();
+    }
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_IF;
+	stmt->as._if.condition = cond;
+	stmt->as._if.then_branch = then_branch;
+	stmt->as._if.else_branch = else_branch;
+	return stmt;
+}
+
+stmt_t *print_stmt(void)
 {
 	expr_t *value = expression();
 	consume(TOKEN_SEMICOLON, "Expect ; after value.");
-	return (stmt_t) {
-		.type = STMT_PRINT,
-		.as.print.expression = value,
-	};
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_PRINT;
+	stmt->as.print.expression = value;
+	return stmt;
 }
 
-stmt_t block_stmt(void)
+stmt_t *while_stmt(void)
+{
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+    expr_t *condition = expression();
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+    stmt_t *body = statement();
+
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_WHILE;
+	stmt->as._while.condition = condition;
+	stmt->as._while.body = body;
+	return stmt;
+}
+
+stmt_t *block_stmt(void)
 {
 	stmt_array_t *statements = malloc(sizeof(stmt_array_t));
 	statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
@@ -281,27 +442,40 @@ stmt_t block_stmt(void)
     }
 
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
-    return (stmt_t) {
-		.type = STMT_BLOCK,
-		.as.block.statements = statements,
-	};
+
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_BLOCK;
+	stmt->as.block.statements = statements;
+	return stmt;
 }
 
-stmt_t expression_stmt(void)
+stmt_t *expression_stmt(void)
 {
 	expr_t *expr = expression();
 	consume(TOKEN_SEMICOLON, "Expect ; after expression.");
-	return (stmt_t) {
-		.type = STMT_EXPR,
-		.as.expr.expression = expr,
-	};
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_EXPR;
+	stmt->as.expr.expression = expr;
+	return stmt;
 }
 
-stmt_t statement(void)
+stmt_t *statement(void)
 {
+	if (check(TOKEN_FOR)) {
+		advance();
+		return for_stmt();
+	}
+	if (check(TOKEN_IF)) {
+		advance();
+		return if_stmt();
+	}
 	if (check(TOKEN_PRINT)) {
 		advance();
 		return print_stmt();
+	}
+	if (check(TOKEN_WHILE)) {
+		advance();
+		return while_stmt();
 	}
 	if (check(TOKEN_LEFT_BRACE)) {
 		advance();
@@ -310,7 +484,7 @@ stmt_t statement(void)
 	return expression_stmt();
 }
 
-stmt_t var_declaration(void)
+stmt_t *var_declaration(void)
 {
 	token_t *name = consume(TOKEN_IDENTIFIER, "Expect variable name.");
 
@@ -321,16 +495,17 @@ stmt_t var_declaration(void)
 	}
 
 	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
-	return (stmt_t) {
-		.type = STMT_VAR,
-		.as.variable.name.type = name->type,
-		.as.variable.name.value = strdup(name->value),
-		.as.variable.name.line = name->line,
-		.as.variable.initializer = initializer,
-	};
+
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_VAR;
+	stmt->as.variable.name.type = name->type;
+	stmt->as.variable.name.value = strdup(name->value);
+	stmt->as.variable.name.line = name->line;
+	stmt->as.variable.initializer = initializer;
+	return stmt;
 }
 
-stmt_t declaration(void)
+stmt_t *declaration(void)
 {
 	if (check(TOKEN_VAR)) {
 		advance();
