@@ -15,6 +15,15 @@ typedef struct {
     value_t *value;
 } return_state_t;
 
+typedef struct {
+	ht_t **envs;
+	int length;
+	int capacity;
+} ht_array_t;
+
+ht_array_t *hts;
+#define DEFAULT_ENVS_SIZE 50
+
 void evaluate_statement(stmt_t *stmt, ht_t *env, return_state_t *state);
 
 void free_val(value_t *value)
@@ -406,12 +415,30 @@ void evaluate_statements(stmt_array_t *array, ht_t *env, return_state_t *state)
 	}
 }
 
+void ht_array_add(ht_array_t *array, ht_t *env)
+{
+	if (array->length == array->capacity) {
+		array->capacity *= 2;
+		array->envs = realloc(array->envs, array->capacity * sizeof(ht_t *));
+	}
+	array->envs[array->length++] = env;
+}
+
+void free_hts(ht_array_t *array)
+{
+	for (int i = 0; i < array->length; i++) {
+		ht_free(array->envs[i]);
+	}
+	free(array->envs);
+	free(array);
+}
+
 void evaluate_block(stmt_array_t *array, ht_t *cur_env, ht_t *scope_env, return_state_t *state)
 {
 	ht_t *previous = cur_env;
 	cur_env = scope_env;
+	ht_array_add(hts, scope_env);
 	evaluate_statements(array, cur_env, state);
-/* 	ht_free(scope_env); */
 	cur_env = previous;
 }
 
@@ -434,7 +461,6 @@ value_t *_call(fn_t *fn, val_array_t *arguments, ht_t *env)
 
 	evaluate_block(fn->stmt->as.function.body->as.block.statements, env, fn_env, &state);
 
-/* 	ht_free(fn_env); */
 	if (state.has_returned) {
 		return state.value;
 	}
@@ -446,12 +472,14 @@ void evaluate_statement(stmt_t *stmt, ht_t *env, return_state_t *state)
 	if (state && state->has_returned)
 		return;
 	switch (stmt->type) {
-		case STMT_IF:
-			if (is_truthy(evaluate(stmt->as._if.condition, env))) {
+		case STMT_IF:;
+			value_t *result = evaluate(stmt->as._if.condition, env);
+			if (is_truthy(result)) {
 				evaluate_statement(stmt->as._if.then_branch, env, state);
 			} else if (stmt->as._if.else_branch) {
 				evaluate_statement(stmt->as._if.else_branch, env, state);
 			}
+			free_val(result);
 			break;
 
 		case STMT_PRINT:;
@@ -539,7 +567,12 @@ void interpret(stmt_array_t *array)
 
 	return_state_t state = { 0, NULL };
 
+	hts = malloc(sizeof(ht_array_t));
+	hts->envs = malloc(DEFAULT_ENVS_SIZE * sizeof (ht_t *));
+	hts->length = 0;
+	hts->capacity = DEFAULT_ENVS_SIZE;
 	evaluate_statements(array, env, &state);
+	free_hts(hts);
 	ht_free(env);
 	free(clock_fn);
 	free(fn);

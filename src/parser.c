@@ -57,6 +57,10 @@ void free_expr(expr_t *expr)
 			break;
 
 		case EXPR_LITERAL:
+			if (expr->as.literal.value->type == VAL_STRING) {
+				if (expr->as.literal.value->as.string)
+					free(expr->as.literal.value->as.string);
+			}
 			free(expr->as.literal.value);
 			free(expr);
 			break;
