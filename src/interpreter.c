@@ -26,7 +26,9 @@ void free_val(value_t *value)
 			free(value->as.string);
 		}
 	} else if (value->type == VAL_FN) {
-
+		if (value->as.function) {
+			free(value->as.function);
+		}
 	}
 	free(value);
 }
@@ -476,9 +478,7 @@ void evaluate_statement(stmt_t *stmt, ht_t *env, return_state_t *state)
 		}
 
 		case STMT_BLOCK:;
-			ht_t *cp_env = ht_init(env);
-			evaluate_block(stmt->as.block.statements, env, cp_env, state);
-/* 			ht_free(cp_env); */
+			evaluate_block(stmt->as.block.statements, env, ht_init(env), state);
 			break;
 
 		case STMT_WHILE:;
@@ -507,7 +507,6 @@ void evaluate_statement(stmt_t *stmt, ht_t *env, return_state_t *state)
 			fn_val->as.function = fn;
 			ht_add(env, stmt->as.function.name.value, fn_val);
 			free_val(fn_val);
-			free(fn);
 			break;
 		
 		case STMT_RETURN:;

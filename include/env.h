@@ -4,11 +4,11 @@
 #include "ast.h"
 #include "lexer.h"
 
-typedef struct ht_t {
+struct ht_t {
 	char *name;
 	value_t value;
 	struct ht_t *enclosing;
-} ht_t;
+};
 
 #define DEFAULT_HT_SIZE 500
 

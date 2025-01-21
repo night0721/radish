@@ -69,6 +69,9 @@ value_t *ht_get(ht_t *ht, token_t *name, int check_enclosing)
 			memcpy(val, &ht[probe_idx].value, sizeof(value_t));
 			if (val->type == VAL_STRING) {
 				val->as.string = strdup(ht[probe_idx].value.as.string);
+			} else if (val->type == VAL_FN) {
+				val->as.function = malloc(sizeof(fn_t));
+				memcpy(val->as.function, ht[probe_idx].value.as.function, sizeof(fn_t));
 			}
 
 			return val;
@@ -101,11 +104,16 @@ void ht_replace(ht_t *ht, char *name, value_t *value)
 		if (!strcmp(ht[probe_idx].name, name)) {
 			if (ht[probe_idx].value.type == VAL_STRING) {
 				free(ht[probe_idx].value.as.string);
+			} else if (ht[probe_idx].value.type == VAL_FN) {
+				free(ht[probe_idx].value.as.function);
 			}
 			ht[probe_idx].value.type = value->type;
 			ht[probe_idx].value.as = value->as;
 			if (value->type == VAL_STRING) {
 				ht[probe_idx].value.as.string = strdup(value->as.string);
+			} else if (value->type == VAL_FN) {
+				ht[probe_idx].value.as.function = malloc(sizeof(fn_t));
+				memcpy(ht[probe_idx].value.as.function, value->as.function, sizeof(fn_t));
 			}
 			return;
 		}
