@@ -34,18 +34,15 @@ int main(int argc, char **argv)
 		free_expr(expr);
 	} else if (!strcmp(command, "evaluate")) {
 		expr_t *expr = parse_expr(array->tokens);
-		value_t val = evaluate(expr, NULL);
+		value_t *val = evaluate(expr, NULL);
 		print_value(val);
 		free_array(array);
 		free_expr(expr);
 	} else if (!strcmp(command, "run")) {
-		ht_t *env = ht_init(NULL);
 		stmt_array_t *stmts = parse(array->tokens);
 		if (errno != 65) {
-			evaluate_statements(stmts, env);
-			ht_free(env);
+			interpret(stmts);
 			free_array(array);
-			free_statements(stmts);
 		}
 	} else {
 		fprintf(stderr, "Unknown command: %s\n", command);

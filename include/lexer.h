@@ -41,6 +41,7 @@ typedef struct {
     int capacity;
 } array_t;
 
+void token_add(array_t *array, token_t token);
 array_t *tokenize(char *filename);
 void print_tokens(token_t *tokens);
 void free_array(array_t *array);

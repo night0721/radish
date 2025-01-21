@@ -3,11 +3,11 @@
 
 #include "ast.h"
 #include "env.h"
-#include "stmt.h"
 
+void free_val(value_t *value);
 void runtime_error(const char *message, int line);
-value_t evaluate(expr_t *expr, ht_t *env);
-void print_value(value_t value);
-void evaluate_statements(stmt_array_t *array, ht_t *env);
+value_t *evaluate(expr_t *expr, ht_t *env);
+void print_value(value_t *value);
+void interpret(stmt_array_t *array);
 
 #endif

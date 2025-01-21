@@ -35,28 +35,29 @@ expr_t *create_literal_expr(token_t *token)
 	expr_t *expr = malloc(sizeof(expr_t));
 	expr->type = EXPR_LITERAL;
 	expr->line = token->line;
+	expr->as.literal.value = malloc(sizeof(value_t));
 	switch (token->type) {
 		case TOKEN_NUMBER:
-			expr->as.literal.value.type = VAL_NUMBER;
+			expr->as.literal.value->type = VAL_NUMBER;
 			double num;
 			sscanf(token->value, "%lf", &num);
-			expr->as.literal.value.as.number = num;
+			expr->as.literal.value->as.number = num;
 			break;
 
 		case TOKEN_NIL:
-			expr->as.literal.value.type = VAL_NIL;
-			expr->as.literal.value.as.number = 0;
+			expr->as.literal.value->type = VAL_NIL;
+			expr->as.literal.value->as.number = 0;
 			break;
 
 		case TOKEN_TRUE:
 		case TOKEN_FALSE:
-			expr->as.literal.value.type = VAL_BOOL;
-			expr->as.literal.value.as.boolean = token->type == TOKEN_TRUE;
+			expr->as.literal.value->type = VAL_BOOL;
+			expr->as.literal.value->as.boolean = token->type == TOKEN_TRUE;
 			break;
 
 		case TOKEN_STRING:
-			expr->as.literal.value.type = VAL_STRING;
-			expr->as.literal.value.as.string = strdup(token->value);
+			expr->as.literal.value->type = VAL_STRING;
+			expr->as.literal.value->as.string = strdup(token->value);
 			break;
 
 		default:
@@ -113,14 +114,27 @@ expr_t *create_logical_expr(token_t *operator, expr_t *left, expr_t *right)
 	return expr;
 }
 
+expr_t *create_call_expr(expr_t *callee, token_t *paren, arg_array_t *args)
+{
+	expr_t *expr = malloc(sizeof(expr_t));
+	expr->type = EXPR_CALL;
+	expr->line = paren->line;
+	expr->as.call.callee = callee;
+	expr->as.call.paren.type = paren->type;
+	expr->as.call.paren.value = strdup(paren->value);
+	expr->as.call.paren.line = paren->line;
+	expr->as.call.args = args;
+	return expr;
+}
+
 void print_ast(expr_t *expr)
 {
 	if (!expr)
 		return;
 	if (expr->type == EXPR_LITERAL) {
-		switch (expr->as.literal.value.type) {
+		switch (expr->as.literal.value->type) {
 			case VAL_BOOL:
-				printf("%s", expr->as.literal.value.as.boolean ? "true" : "false");
+				printf("%s", expr->as.literal.value->as.boolean ? "true" : "false");
 				break;
 
 			case VAL_NIL:
@@ -128,7 +142,7 @@ void print_ast(expr_t *expr)
 				break;
 
 			case VAL_NUMBER:;
-				double value = expr->as.literal.value.as.number;
+				double value = expr->as.literal.value->as.number;
 				if (value == (int) value) {
 					printf("%.1f", value);
 				} else {
@@ -137,7 +151,11 @@ void print_ast(expr_t *expr)
 				break;
 
 			case VAL_STRING:
-				printf("%s", expr->as.literal.value.as.string);
+				printf("%s", expr->as.literal.value->as.string);
+				break;
+
+			case VAL_FN:
+				printf("<native fn>");
 				break;
 		}
 	} else if (expr->type == EXPR_BINARY) {

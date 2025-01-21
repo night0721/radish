@@ -5,6 +5,8 @@
 #include "env.h"
 #include "interpreter.h"
 
+void free_statement(stmt_t *stmt);
+
 ht_t *ht_init(ht_t *env)
 {	
 	ht_t *ht = malloc(sizeof(ht_t) * DEFAULT_HT_SIZE);
@@ -28,7 +30,7 @@ unsigned int hash(char *key)
 	return h;
 }
 
-void ht_add(ht_t *ht, char *name, value_t value)
+void ht_add(ht_t *ht, char *name, value_t *value)
 {
 	unsigned int idx = hash(name) % DEFAULT_HT_SIZE;
 	/* Linear probing for collision resolution */
@@ -36,11 +38,14 @@ void ht_add(ht_t *ht, char *name, value_t value)
 		int probe_idx = (idx + i) % DEFAULT_HT_SIZE;
 		if (!ht[probe_idx].name) {
 			ht[probe_idx].name = strdup(name);
-			ht[probe_idx].value.type = value.type;
-			if (value.type == VAL_STRING) {
-				ht[probe_idx].value.as.string = strdup(value.as.string);
+			ht[probe_idx].value.type = value->type;
+			if (value->type == VAL_STRING) {
+				ht[probe_idx].value.as.string = strdup(value->as.string);
+			} else if (value->type == VAL_FN) {
+				ht[probe_idx].value.as.function = malloc(sizeof(fn_t));
+				memcpy(ht[probe_idx].value.as.function, value->as.function, sizeof(fn_t));
 			} else {
-				ht[probe_idx].value.as = value.as;
+				ht[probe_idx].value.as = value->as;
 			}
 			return;
 		} else {
@@ -56,8 +61,15 @@ value_t *ht_get(ht_t *ht, token_t *name, int check_enclosing)
 	/* Linear probing to search for the key */
 	for (int i = 0; i < DEFAULT_HT_SIZE; i++) {
 		int probe_idx = (idx + i) % DEFAULT_HT_SIZE;
-		if (ht[probe_idx].name && !strcmp(ht[probe_idx].name, name->value))
-			return &ht[probe_idx].value;
+		if (ht[probe_idx].name && !strcmp(ht[probe_idx].name, name->value)) {
+			value_t *val = malloc(sizeof(value_t));
+			memcpy(val, &ht[probe_idx].value, sizeof(value_t));
+			if (val->type == VAL_STRING) {
+				val->as.string = strdup(ht[probe_idx].value.as.string);
+			}
+
+			return val;
+		}
 	}
 	if (check_enclosing) {
 		if (ht->enclosing) {
@@ -73,7 +85,7 @@ value_t *ht_get(ht_t *ht, token_t *name, int check_enclosing)
 	return NULL;
 }
 
-void ht_replace(ht_t *ht, char *name, value_t value)
+void ht_replace(ht_t *ht, char *name, value_t *value)
 {
 	unsigned int idx = hash(name) % DEFAULT_HT_SIZE;
 
@@ -87,20 +99,22 @@ void ht_replace(ht_t *ht, char *name, value_t value)
 			if (ht[probe_idx].value.type == VAL_STRING) {
 				free(ht[probe_idx].value.as.string);
 			}
-			ht[probe_idx].value.type = value.type;
-			ht[probe_idx].value.as = value.as;
-			if (value.type == VAL_STRING) {
-				ht[probe_idx].value.as.string = strdup(value.as.string);
+			ht[probe_idx].value.type = value->type;
+			ht[probe_idx].value.as = value->as;
+			if (value->type == VAL_STRING) {
+				ht[probe_idx].value.as.string = strdup(value->as.string);
 			}
 			return;
 		}
 	}
 }
 
-void ht_assign(ht_t *ht, token_t *name, value_t value)
+void ht_assign(ht_t *ht, token_t *name, value_t *value)
 {
-	if (ht_get(ht, name, 0)) {
+	value_t *val = ht_get(ht, name, 0);
+	if (val) {
 		ht_replace(ht, name->value, value);
+		free_val(val);
 		return;
 	}
 	if (ht->enclosing) {
@@ -119,6 +133,8 @@ void ht_free(ht_t *ht)
 			free(ht[i].name);
 			if (ht[i].value.type == VAL_STRING) {
 				free(ht[i].value.as.string);
+			} else if (ht[i].value.type == VAL_FN) {
+				free(ht[i].value.as.function);
 			}
 		}
 	}

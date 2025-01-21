@@ -4,11 +4,13 @@
 #include <errno.h>
 
 #include "ast.h"
+#include "interpreter.h"
 #include "lexer.h"
 #include "parser.h"
 
 int current = 0;
 token_t *tokens;
+void free_args(arg_array_t *array);
 expr_t *expression(void);
 stmt_t *expression_stmt(void);
 stmt_t *statement(void);
@@ -54,9 +56,7 @@ void free_expr(expr_t *expr)
 			break;
 
 		case EXPR_LITERAL:
-			if (expr->as.literal.value.type == VAL_STRING) {
-				free(expr->as.literal.value.as.string);
-			}
+			free(expr->as.literal.value);
 			free(expr);
 			break;
 	
@@ -75,6 +75,13 @@ void free_expr(expr_t *expr)
 			free(expr->as.logical.operator.value);
 			free_expr(expr->as.logical.left);
 			free_expr(expr->as.logical.right);
+			free(expr);
+			break;
+
+		case EXPR_CALL:
+			free_args(expr->as.call.args);
+			free_expr(expr->as.call.callee);
+			free(expr->as.call.paren.value);
 			free(expr);
 			break;
 
@@ -109,6 +116,16 @@ int check(token_type_t type)
 	return tokens[current].type == type;
 }
 
+int match(token_type_t type)
+{
+	if (check(type)) {
+		advance();
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 token_t *consume(token_type_t type, char *message)
 {
 	if (!check(type)) {
@@ -123,21 +140,18 @@ token_t *consume(token_type_t type, char *message)
 
 expr_t *primary(void)
 {
-	if (check(TOKEN_FALSE) || check(TOKEN_TRUE) || check(TOKEN_NIL) ||
-			check(TOKEN_NUMBER) || check(TOKEN_STRING)) {
-		token_t *tok = peek();
-		advance();
+	if (match(TOKEN_FALSE) || match(TOKEN_TRUE) || match(TOKEN_NIL) ||
+			match(TOKEN_NUMBER) || match(TOKEN_STRING)) {
+		token_t *tok = previous();
 		return create_literal_expr(tok);
 	}
 
-	if (check(TOKEN_IDENTIFIER)) {
-		token_t *tok = peek();
-		advance();
+	if (match(TOKEN_IDENTIFIER)) {
+		token_t *tok = previous();
 		return create_variable_expr(tok);
 	}
 
-	if (check(TOKEN_LEFT_PAREN)) {
-		advance();
+	if (match(TOKEN_LEFT_PAREN)) {
 		expr_t *expr = expression();
 		consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 		return create_grouping_expr(expr);
@@ -146,25 +160,67 @@ expr_t *primary(void)
 	return NULL;
 }
 
+void arg_add(arg_array_t *array, expr_t *expr)
+{
+	if (array->length == array->capacity) {
+		array->capacity *= 2;
+		array->arguments = realloc(array->arguments, array->capacity * sizeof(expr_t *));
+	}
+	array->arguments[array->length++] = expr;
+}
+
+void free_args(arg_array_t *array)
+{
+	for (int i = 0; i < array->length; i++) {
+		free_expr(array->arguments[i]);
+	}
+	free(array->arguments);
+	free(array);
+}
+
+expr_t *call(void)
+{
+    expr_t *expr = primary();
+	while (1) {
+		if (match(TOKEN_LEFT_PAREN)) {
+			arg_array_t *args = malloc(sizeof(arg_array_t));
+			args->arguments = malloc(DEFAULT_ARGS_SIZE * sizeof(expr_t *));
+			args->length = 0;
+			args->capacity = DEFAULT_ARGS_SIZE;
+			if (!check(TOKEN_RIGHT_PAREN)) {
+				do {
+					if (args->length >= 255) {
+						error(peek(), "Can't have more than 255 arguments.");
+					}
+					arg_add(args, expression());
+				} while (match(TOKEN_COMMA));
+			}
+			token_t *paren = consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+			expr = create_call_expr(expr, paren, args);
+		} else {
+			break;
+		}
+    }
+	return expr;
+}
+
 expr_t *unary(void)
 {
-	if (check(TOKEN_BANG) || check(TOKEN_MINUS)) {
-		token_t *operator = peek();
-		advance();
+	if (match(TOKEN_BANG) || match(TOKEN_MINUS)) {
+		token_t *operator = previous();
 		expr_t *right = unary();
 		return create_unary_expr(operator, right);
 	}
 
-	return primary();
+	return call();
 }
 
 expr_t *factor(void)
 {
 	expr_t *expr = unary();
 
-	while (check(TOKEN_SLASH) || check(TOKEN_STAR)) {
-		token_t *operator = peek();
-		advance();
+	while (match(TOKEN_SLASH) || match(TOKEN_STAR)) {
+		token_t *operator = previous();
 		expr_t *right = unary();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -176,9 +232,8 @@ expr_t *term(void)
 {
 	expr_t *expr = factor();
 
-	while (check(TOKEN_MINUS) || check(TOKEN_PLUS)) {
-		token_t *operator = peek();
-		advance();
+	while (match(TOKEN_MINUS) || match(TOKEN_PLUS)) {
+		token_t *operator = previous();
 		expr_t *right = factor();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -190,10 +245,9 @@ expr_t *comparison(void)
 {
 	expr_t *expr = term();
 
-	while (check(TOKEN_GREATER) || check(TOKEN_GREATER_EQUAL) || check(TOKEN_LESS)
-			|| check(TOKEN_LESS_EQUAL)) {
-		token_t *operator = peek();
-		advance();
+	while (match(TOKEN_GREATER) || match(TOKEN_GREATER_EQUAL) || match(TOKEN_LESS)
+			|| match(TOKEN_LESS_EQUAL)) {
+		token_t *operator = previous();
 		expr_t *right = term();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -205,9 +259,8 @@ expr_t *equality(void)
 {
 	expr_t *expr = comparison();
 
-	while (check(TOKEN_BANG_EQUAL) || check(TOKEN_EQUAL_EQUAL)) {
-		token_t *operator = peek();
-		advance();
+	while (match(TOKEN_BANG_EQUAL) || match(TOKEN_EQUAL_EQUAL)) {
+		token_t *operator = previous();
 		expr_t *right = comparison();
 		expr = create_binary_expr(operator, expr, right);
 	}
@@ -219,9 +272,8 @@ expr_t *and(void)
 {
 	expr_t *expr = equality();
 
-    while (check(TOKEN_AND)) {
-		token_t *operator = peek();
-		advance();
+    while (match(TOKEN_AND)) {
+		token_t *operator = previous();
 		expr_t *right = equality();
 		expr = create_logical_expr(operator, expr, right);
     }
@@ -233,9 +285,8 @@ expr_t *or(void)
 {
 	expr_t *expr = and();
 
-    while (check(TOKEN_OR)) {
-		token_t *operator = peek();
-		advance();
+    while (match(TOKEN_OR)) {
+		token_t *operator = previous();
 		expr_t *right = and();
 		expr = create_logical_expr(operator, expr, right);
     }
@@ -247,9 +298,8 @@ expr_t *assignment(void)
 {
 	expr_t *expr = or();
 
-	if (check(TOKEN_EQUAL)) {
-		token_t *equals = peek();
-		advance();
+	if (match(TOKEN_EQUAL)) {
+		token_t *equals = previous();
 		expr_t *value = assignment();
 
 		if (expr->type == EXPR_VARIABLE) {
@@ -302,6 +352,11 @@ void free_statement(stmt_t *stmt)
 		free_expr(stmt->as._while.condition);
 		free_statement(stmt->as._while.body);
 		free(stmt);
+	} else if (stmt->type == STMT_FUN) {
+		free(stmt->as.function.name.value);
+		free_array(stmt->as.function.params);
+		free_statement(stmt->as.function.body);
+		free(stmt);
 	}
 }
 
@@ -318,10 +373,8 @@ stmt_t *for_stmt(void)
 {
 	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
 	stmt_t *initializer = NULL;
-    if (check(TOKEN_SEMICOLON)) {
-		advance();
-    } else if (check(TOKEN_VAR)) {
-		advance();
+    if (match(TOKEN_SEMICOLON)) {
+    } else if (match(TOKEN_VAR)) {
 		initializer = var_declaration();
     } else {
 		initializer = expression_stmt();
@@ -393,8 +446,7 @@ stmt_t *if_stmt(void)
 	consume(TOKEN_RIGHT_PAREN, "Expect ')' after if condition.");
 	stmt_t *then_branch = statement();
     stmt_t *else_branch = NULL;
-    if (check(TOKEN_ELSE)) {
-		advance();
+    if (match(TOKEN_ELSE)) {
 		else_branch = statement();
     }
 	stmt_t *stmt = malloc(sizeof(stmt_t));
@@ -461,27 +513,60 @@ stmt_t *expression_stmt(void)
 
 stmt_t *statement(void)
 {
-	if (check(TOKEN_FOR)) {
-		advance();
+	if (match(TOKEN_FOR)) {
 		return for_stmt();
 	}
-	if (check(TOKEN_IF)) {
-		advance();
+	if (match(TOKEN_IF)) {
 		return if_stmt();
 	}
-	if (check(TOKEN_PRINT)) {
-		advance();
+	if (match(TOKEN_PRINT)) {
 		return print_stmt();
 	}
-	if (check(TOKEN_WHILE)) {
-		advance();
+	if (match(TOKEN_WHILE)) {
 		return while_stmt();
 	}
-	if (check(TOKEN_LEFT_BRACE)) {
-		advance();
+	if (match(TOKEN_LEFT_BRACE)) {
 		return block_stmt();
 	}
 	return expression_stmt();
+}
+
+stmt_t *function(char *kind)
+{
+	char err[512];
+	snprintf(err, 512, "Expect %s name.", kind);
+	token_t *name = consume(TOKEN_IDENTIFIER, err);
+	snprintf(err, 512, "Expect '(' after %s name.", kind);
+	consume(TOKEN_LEFT_PAREN, err);
+	array_t *parameters = malloc(sizeof(array_t));
+	parameters->tokens = malloc(DEFAULT_ARGS_SIZE * sizeof(token_t));
+	parameters->length = 0;
+	parameters->capacity = DEFAULT_ARGS_SIZE;
+
+	if (!check(TOKEN_RIGHT_PAREN)) {
+		do {
+			if (parameters->length >= 255) {
+				error(peek(), "Can't have more than 255 parameters.");
+			}
+
+			token_t *param = consume(TOKEN_IDENTIFIER, "Expect parameter name.");
+			token_t param_cpy;
+			memcpy(&param_cpy, param, sizeof(token_t));
+			param_cpy.value = strdup(param->value);
+			token_add(parameters, param_cpy);
+		} while (match(TOKEN_COMMA));
+	}
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+	snprintf(err, 512, "Expect '{' before %s body.", kind);
+	consume(TOKEN_LEFT_BRACE, err);
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_FUN;
+	stmt->as.function.name.type = name->type;
+	stmt->as.function.name.value = strdup(name->value);
+	stmt->as.function.name.line = name->line;
+	stmt->as.function.params = parameters;
+	stmt->as.function.body = block_stmt();
+	return stmt;
 }
 
 stmt_t *var_declaration(void)
@@ -489,8 +574,7 @@ stmt_t *var_declaration(void)
 	token_t *name = consume(TOKEN_IDENTIFIER, "Expect variable name.");
 
 	expr_t *initializer = NULL;
-	if (check(TOKEN_EQUAL)) {
-		advance();
+	if (match(TOKEN_EQUAL)) {
 		initializer = expression();
 	}
 
@@ -507,8 +591,10 @@ stmt_t *var_declaration(void)
 
 stmt_t *declaration(void)
 {
-	if (check(TOKEN_VAR)) {
-		advance();
+	if (match(TOKEN_FUN)) {
+		return function("function");
+	}
+	if (match(TOKEN_VAR)) {
 		return var_declaration();
 	}
 
@@ -522,7 +608,7 @@ stmt_array_t *parse(token_t *tks)
 		return NULL;
 	} else {
 		stmt_array_t *statements = malloc(sizeof(stmt_array_t));
-		statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t));
+		statements->statements = malloc(DEFAULT_STMTS_SIZE * sizeof(stmt_t *));
 		statements->length = 0;
 		statements->capacity = DEFAULT_STMTS_SIZE;
 		while (!end()) {

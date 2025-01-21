@@ -1,7 +1,8 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <time.h>
 
 #include "ast.h"
 #include "env.h"
@@ -9,12 +10,30 @@
 #include "lexer.h"
 #include "parser.h"
 
-value_t visit_literal(expr_t *expr)
+void evaluate_statement(stmt_t *stmt, ht_t *env);
+
+void free_val(value_t *value)
 {
-	return expr->as.literal.value;
+	if (!value)
+		return;
+	if (value->type == VAL_STRING) {
+		if (value->as.string) {
+			free(value->as.string);
+		}
+	} else if (value->type == VAL_FN) {
+
+	}
+	free(value);
 }
 
-value_t visit_grouping(expr_t *expr, ht_t *env)
+value_t *visit_literal(expr_t *expr)
+{
+	value_t *val = malloc(sizeof(value_t));
+	memcpy(val, expr->as.literal.value, sizeof(value_t));
+	return val;
+}
+
+value_t *visit_grouping(expr_t *expr, ht_t *env)
 {
 	return evaluate(expr->as.grouping.expression, env);
 }
@@ -26,56 +45,66 @@ void runtime_error(const char *message, int line)
 	exit(70);
 }
 
-value_t visit_binary(expr_t *expr, ht_t *env)
+value_t *visit_binary(expr_t *expr, ht_t *env)
 {
 	token_type_t op_type = expr->as.binary.operator.type;
-	value_t right = evaluate(expr->as.binary.right, env);
-	value_t left = evaluate(expr->as.binary.left, env);
+	value_t *right = evaluate(expr->as.binary.right, env);
+	value_t *left = evaluate(expr->as.binary.left, env);
 
 	// Arithmetic
-	if (left.type == VAL_NUMBER && right.type == VAL_NUMBER) {
-		value_t result = {.type = VAL_NUMBER};
+	if (left->type == VAL_NUMBER && right->type == VAL_NUMBER) {
+		value_t *result = malloc(sizeof(value_t));
+		result->type = VAL_NUMBER;
 		switch (op_type) {
 			case TOKEN_PLUS:
-				result.as.number = left.as.number + right.as.number;
+				result->as.number = left->as.number + right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_MINUS:
-				result.as.number = left.as.number - right.as.number;
+				result->as.number = left->as.number - right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_STAR:
-				result.as.number = left.as.number * right.as.number;
+				result->as.number = left->as.number * right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_SLASH:
-				if (right.as.number == 0) {
+				if (right->as.number == 0) {
 					runtime_error("Division by zero.", expr->line);
 				}
-				result.as.number = left.as.number / right.as.number;
+				result->as.number = left->as.number / right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 			default:
 				break;
 		}
+		free_val(result);
 	}
 
 	// Comparison
 	if (op_type == TOKEN_EQUAL_EQUAL || op_type == TOKEN_BANG_EQUAL) {
 		int is_equal;
-		if (left.type != right.type) {
+		if (left->type != right->type) {
 			is_equal = 0;
 		} else {
-			switch (left.type) {
+			switch (left->type) {
 				case VAL_NUMBER:
-					is_equal = left.as.number == right.as.number;
+					is_equal = left->as.number == right->as.number;
 					break;
 
 				case VAL_BOOL:
-					is_equal = left.as.boolean == right.as.boolean;
+					is_equal = left->as.boolean == right->as.boolean;
 					break;
 
 				case VAL_STRING:
-					is_equal = strcmp(left.as.string, right.as.string) == 0;
+					is_equal = strcmp(left->as.string, right->as.string) == 0;
 					break;
 
 				case VAL_NIL:
@@ -87,29 +116,41 @@ value_t visit_binary(expr_t *expr, ht_t *env)
 					break;
 			}
 		}
-		value_t result = {.type = VAL_BOOL};
-		result.as.boolean = op_type == TOKEN_EQUAL_EQUAL ? is_equal : !is_equal;
+		value_t *result = malloc(sizeof(value_t));
+		result->type = VAL_BOOL;
+		result->as.boolean = op_type == TOKEN_EQUAL_EQUAL ? is_equal : !is_equal;
+		free_val(left);
+		free_val(right);
 		return result;
 	}
 
 	// Number Comparison
-	if (left.type == VAL_NUMBER && right.type == VAL_NUMBER) {
-		value_t result = {.type = VAL_BOOL };
+	if (left->type == VAL_NUMBER && right->type == VAL_NUMBER) {
+		value_t *result = malloc(sizeof(value_t));
+		result->type = VAL_BOOL;
 		switch (op_type) {
 			case TOKEN_GREATER:
-				result.as.boolean= left.as.number > right.as.number;
+				result->as.boolean = left->as.number > right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_GREATER_EQUAL:
-				result.as.boolean = left.as.number >= right.as.number;
+				result->as.boolean = left->as.number >= right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_LESS:
-				result.as.boolean = left.as.number < right.as.number;
+				result->as.boolean = left->as.number < right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			case TOKEN_LESS_EQUAL:
-				result.as.boolean = left.as.number <= right.as.number;
+				result->as.boolean = left->as.number <= right->as.number;
+				free_val(left);
+				free_val(right);
 				return result;
 
 			default: break;
@@ -117,40 +158,46 @@ value_t visit_binary(expr_t *expr, ht_t *env)
 	}
 
 	// String concatenation
-	if (left.type == VAL_STRING && right.type == VAL_STRING) {
+	if (left->type == VAL_STRING && right->type == VAL_STRING) {
 		if (op_type == TOKEN_PLUS) {
-			value_t result = {.type = VAL_STRING};
-			size_t left_len = strlen(left.as.string);
-			size_t right_len = strlen(right.as.string);
-			result.as.string = malloc(left_len + right_len + 1);
-			strcpy(result.as.string, left.as.string);
-			strcat(result.as.string, right.as.string);
+			value_t *result = malloc(sizeof(value_t));
+			result->type = VAL_STRING;
+			size_t left_len = strlen(left->as.string);
+			size_t right_len = strlen(right->as.string);
+			result->as.string = malloc(left_len + right_len + 1);
+			strcpy(result->as.string, left->as.string);
+			strcat(result->as.string, right->as.string);
+			free_val(left);
+			free_val(right);
 			return result;
 		}
 	}
 
 	// String/number comparisons
-	if ((left.type == VAL_STRING && right.type == VAL_NUMBER) ||
-			(left.type == VAL_NUMBER && right.type == VAL_STRING)) {
+	if ((left->type == VAL_STRING && right->type == VAL_NUMBER) ||
+			(left->type == VAL_NUMBER && right->type == VAL_STRING)) {
 		runtime_error("Operands must be numbers.", expr->line);
 	}
 
 	runtime_error("Operands must be two numbers or two strings.", expr->line);
-	return (value_t){.type = VAL_NIL};
-
+	value_t *val = malloc(sizeof(value_t));
+	val->type = VAL_NIL;
+	free_val(left);
+	free_val(right);
+	return val;
 }
 
-int is_truthy(value_t value)
+int is_truthy(value_t *value)
 {
-	switch (value.type) {
+	switch (value->type) {
 		case VAL_NIL:
 			return 0;
 
 		case VAL_BOOL:
-			return value.as.boolean;
+			return value->as.boolean;
 
 		case VAL_NUMBER:
-			if (value.as.number == 0)
+			if (value->as.number == 0)
 				return 0;
 			return 1;
 
@@ -162,45 +209,57 @@ int is_truthy(value_t value)
 	}
 }
 
-value_t visit_unary(expr_t *expr, ht_t *env)
+value_t *visit_unary(expr_t *expr, ht_t *env)
 {
-	value_t operand = evaluate(expr->as.unary.right, env);
+	value_t *operand = evaluate(expr->as.unary.right, env);
 
 	if (expr->as.unary.operator.type == TOKEN_MINUS) {
-		if (operand.type == VAL_NUMBER) {
-			value_t result = {.type = VAL_NUMBER, .as.number = -operand.as.number};
+		if (operand->type == VAL_NUMBER) {
+			value_t *result = malloc(sizeof(value_t));
+			result->type = VAL_NUMBER;
+			result->as.number = -operand->as.number;
+			free_val(operand);
 			return result;
 		} else {
 			runtime_error("Operand must be a number.", expr->line);
 		}
 	} else if (expr->as.unary.operator.type == TOKEN_BANG) {
-		value_t result = {.type = VAL_BOOL, .as.boolean = !is_truthy(operand)};
+		value_t *result = malloc(sizeof(value_t));
+		result->type = VAL_BOOL;
+		result->as.boolean = !is_truthy(operand);
+		free_val(operand);
+
 		return result;
 	}
 
-	return (value_t){.type = VAL_NIL};
+	value_t *val = malloc(sizeof(value_t));
+	val->type = VAL_NIL;
+	free_val(operand);
+	return val;
 }
 
-value_t visit_variable(expr_t *expr, ht_t *env)
+value_t *visit_variable(expr_t *expr, ht_t *env)
 {
 	value_t *val = ht_get(env, &expr->as.variable.name, 1);
 	if (val) {
-		return *val;
+		return val;
 	} else {
-		return (value_t) {.type = VAL_NIL};
+		val = malloc(sizeof(value_t));
+		val->type = VAL_NIL;
+		return val;
 	}
 }
 
-value_t visit_assign(expr_t *expr, ht_t *env)
+value_t *visit_assign(expr_t *expr, ht_t *env)
 {
-	value_t value = evaluate(expr->as.assign.value, env);
+	value_t *value = evaluate(expr->as.assign.value, env);
 	ht_assign(env, &expr->as.assign.name->as.variable.name, value);
     return value;
 }
 
-value_t visit_logical(expr_t *expr, ht_t *env)
+value_t *visit_logical(expr_t *expr, ht_t *env)
 {
-	value_t left = evaluate(expr->as.logical.left, env);
+	value_t *left = evaluate(expr->as.logical.left, env);
 
     if (expr->as.logical.operator.type == TOKEN_OR) {
       if (is_truthy(left))
@@ -213,11 +272,58 @@ value_t visit_logical(expr_t *expr, ht_t *env)
     return evaluate(expr->as.logical.right, env);
 }
 
-value_t evaluate(expr_t *expr, ht_t *env)
+void val_add(val_array_t *array, value_t *expr)
+{
+	if (array->length == array->capacity) {
+		array->capacity *= 2;
+		array->arguments = realloc(array->arguments, array->capacity * sizeof(expr_t *));
+	}
+	array->arguments[array->length++] = expr;
+}
+
+void free_vals(val_array_t *array)
+{
+	for (int i = 0; i < array->length; i++) {
+		free_val(array->arguments[i]);
+	}
+	free(array->arguments);
+	free(array);
+}
+
+value_t *visit_call(expr_t *expr, ht_t *env)
+{
+	value_t *callee = evaluate(expr->as.call.callee, env);
+	if (callee->type != VAL_FN) {
+		runtime_error("Can only call functions and classes.", expr->line);
+	}
+
+	val_array_t *arguments = malloc(sizeof(val_array_t));
+	arguments->arguments = malloc(DEFAULT_ARGS_SIZE * sizeof(value_t *));
+	arguments->length = 0;
+	arguments->capacity = DEFAULT_ARGS_SIZE;
+	
+	for (int i = 0; i < expr->as.call.args->length; i++) {
+		value_t *val = evaluate(expr->as.call.args->arguments[i], env);
+		val_add(arguments, val);
+	}
+
+	if (arguments->length != callee->as.function->arity) {
+		char err[512];
+		snprintf(err, 512, "Expected %d arguments but got %d.", callee->as.function->arity, arguments->length);
+		runtime_error(err, expr->line);
+    }
+    value_t *res = callee->as.function->call(callee->as.function->stmt, arguments, env);
+	free_vals(arguments);
+	free_val(callee);
+	return res;
+}
+
+value_t *evaluate(expr_t *expr, ht_t *env)
 {
 	if (!expr) {
-		value_t nil_value = {.type = VAL_NIL };
-		return nil_value;
+		value_t *nil = malloc(sizeof(value_t));
+		nil->type = VAL_NIL;
+		return nil;
 	}
 	switch (expr->type) {
 		case EXPR_LITERAL:
@@ -234,17 +340,19 @@ value_t evaluate(expr_t *expr, ht_t *env)
 			return visit_assign(expr, env);
 		case EXPR_LOGICAL:
 			return visit_logical(expr, env);
+		case EXPR_CALL:
+			return visit_call(expr, env);
 		default:
 			exit(65);
 			break;
 	}
 }
 
-void print_value(value_t value)
+void print_value(value_t *value)
 {
-	switch (value.type) {
+	switch (value->type) {
 		case VAL_BOOL:
-			printf("%s\n", value.as.boolean == 1 ? "true" : "false");
+			printf("%s\n", value->as.boolean == 1 ? "true" : "false");
 			break;
 
 		case VAL_NIL:
@@ -252,66 +360,22 @@ void print_value(value_t value)
 			break;
 
 		case VAL_STRING:
-			printf("%s\n", value.as.string);
+			printf("%s\n", value->as.string);
 			break;
 
 		case VAL_NUMBER:
-			if (value.as.number == (int) value.as.number) {
-				printf("%d\n", (int) value.as.number);
+			if (value->as.number == (int) value->as.number) {
+				printf("%d\n", (int) value->as.number);
 			} else {
-				printf("%g\n", value.as.number);
+				printf("%g\n", value->as.number);
 			}
 			break;
 
-		default:
-			break;
-	}
-}
-
-void evaluate_block(stmt_array_t *array, ht_t *cur_env, ht_t *scope_env)
-{
-	ht_t *previous = cur_env;
-	cur_env = scope_env;
-	evaluate_statements(array, cur_env);
-	ht_free(scope_env);
-	cur_env = previous;
-}
-
-void evaluate_statement(stmt_t *stmt, ht_t *env)
-{
-	switch (stmt->type) {
-		case STMT_IF:
-			if (is_truthy(evaluate(stmt->as._if.condition, env))) {
-				evaluate_statement(stmt->as._if.then_branch, env);
-			} else if (stmt->as._if.else_branch) {
-				evaluate_statement(stmt->as._if.else_branch, env);
-			}
-			break;
-
-		case STMT_PRINT:
-			print_value(evaluate(stmt->as.print.expression, env));
-			break;
-
-		case STMT_EXPR:
-			evaluate(stmt->as.expr.expression, env);
-			break;
-
-		case STMT_VAR: {
-			value_t value = {.type = VAL_NIL};
-			if (stmt->as.variable.initializer) {
-				value = evaluate(stmt->as.variable.initializer, env);
-			}
-			ht_add(env, stmt->as.variable.name.value, value);
-			break;
-		}
-
-		case STMT_BLOCK:
-			evaluate_block(stmt->as.block.statements, env, ht_init(env));
-			break;
-
-		case STMT_WHILE:
-			while (is_truthy(evaluate(stmt->as._while.condition, env))) {
-				evaluate_statement(stmt->as._while.body, env);
+		case VAL_FN:
+			if (value->as.function->type == FN_NATIVE) {
+				printf("<native fn>\n");
+			} else {
+				printf("<fn %s>\n", value->as.function->stmt->as.function.name.value);
 			}
 			break;
 
@@ -325,4 +389,122 @@ void evaluate_statements(stmt_array_t *array, ht_t *env)
 	for (int i = 0; i < array->length; i++) {
 		evaluate_statement(array->statements[i], env);
 	}
+}
+
+void evaluate_block(stmt_array_t *array, ht_t *cur_env, ht_t *scope_env)
+{
+	ht_t *previous = cur_env;
+	cur_env = scope_env;
+	evaluate_statements(array, cur_env);
+	ht_free(scope_env);
+	cur_env = previous;
+}
+
+value_t *_clock(stmt_t *stmt, val_array_t *arguments, ht_t *env)
+{
+	value_t *val = malloc(sizeof(value_t));
+	val->type = VAL_NUMBER;
+	val->as.number = time(NULL);
+	return val;
+}
+
+value_t *_call(stmt_t *stmt, val_array_t *arguments, ht_t *env)
+{
+	ht_t *fn_env = ht_init(env);
+	for (int i = 0; i < stmt->as.function.params->length; i++) {
+		ht_add(fn_env, stmt->as.function.params->tokens[i].value, arguments->arguments[i]);
+	}
+
+	evaluate_block(stmt->as.function.body->as.block.statements, env, fn_env);
+
+    return NULL;
+}
+
+void evaluate_statement(stmt_t *stmt, ht_t *env)
+{
+	switch (stmt->type) {
+		case STMT_IF:
+			if (is_truthy(evaluate(stmt->as._if.condition, env))) {
+				evaluate_statement(stmt->as._if.then_branch, env);
+			} else if (stmt->as._if.else_branch) {
+				evaluate_statement(stmt->as._if.else_branch, env);
+			}
+			break;
+
+		case STMT_PRINT:;
+			value_t *val = evaluate(stmt->as.print.expression, env);
+			print_value(val);
+			free_val(val);
+			break;
+
+		case STMT_EXPR:;
+			value_t *res = evaluate(stmt->as.expr.expression, env);
+			free_val(res);
+			break;
+
+		case STMT_VAR: {
+			value_t *value = malloc(sizeof(value_t));
+			value->type = VAL_NIL;
+			if (stmt->as.variable.initializer) {
+				free(value);
+				value = evaluate(stmt->as.variable.initializer, env);
+			}
+			ht_add(env, stmt->as.variable.name.value, value);
+			free_val(value);
+			break;
+		}
+
+		case STMT_BLOCK:
+			evaluate_block(stmt->as.block.statements, env, ht_init(env));
+			break;
+
+		case STMT_WHILE:;
+			value_t *cond = evaluate(stmt->as._while.condition, env);
+			while (is_truthy(cond)) {
+				evaluate_statement(stmt->as._while.body, env);
+				free_val(cond);
+				cond = evaluate(stmt->as._while.condition, env);
+			}
+			free_val(cond);
+			break;
+
+		case STMT_FUN:;
+			fn_t *fn = malloc(sizeof(fn_t));
+			fn->type = FN_CUSTOM;
+			fn->arity = stmt->as.function.params->length;
+			fn->stmt = stmt;
+			fn->call = _call;
+
+			value_t *fn_val = malloc(sizeof(value_t));
+			fn_val->type = VAL_FN;
+			fn_val->as.function = fn;
+			ht_add(env, stmt->as.function.name.value, fn_val);
+			free_val(fn_val);
+			free(fn);
+			break;
+
+		default:
+			break;
+	}
+}
+
+void interpret(stmt_array_t *array)
+{
+	ht_t *env = ht_init(NULL);
+	value_t *clock_fn = malloc(sizeof(value_t));
+	clock_fn->type = VAL_FN;
+	fn_t *fn = malloc(sizeof(fn_t));
+	fn->type = FN_NATIVE;
+	fn->arity = 0;
+	/* Native function don't have body */
+	fn->stmt = NULL;
+	fn->call = _clock;
+	clock_fn->as.function = fn;
+
+	ht_add(env, "clock", clock_fn);
+	evaluate_statements(array, env);
+	ht_free(env);
+	free(clock_fn);
+	free(fn);
+	free_statements(array);
 }
