@@ -1,3 +1,4 @@
+*.rd
 rd
 *.o
 *.tar.gz
