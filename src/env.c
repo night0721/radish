@@ -57,6 +57,9 @@ void ht_add(ht_t *ht, char *name, value_t *value)
 
 value_t *ht_get(ht_t *ht, token_t *name, int check_enclosing)
 {
+	if (!ht) {
+		return NULL;
+	}
 	unsigned int idx = hash(name->value) % DEFAULT_HT_SIZE;
 	/* Linear probing to search for the key */
 	for (int i = 0; i < DEFAULT_HT_SIZE; i++) {

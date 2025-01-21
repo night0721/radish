@@ -10,7 +10,7 @@ typedef struct ht_t {
 	struct ht_t *enclosing;
 } ht_t;
 
-#define DEFAULT_HT_SIZE 50
+#define DEFAULT_HT_SIZE 500
 
 ht_t *ht_init(ht_t *env);
 void ht_add(ht_t *ht, char *name, value_t *value);

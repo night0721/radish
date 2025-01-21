@@ -51,6 +51,7 @@ typedef enum {
 	STMT_PRINT,
 	STMT_VAR,
 	STMT_WHILE,
+	STMT_RETURN,
 } stmt_type_t;
 
 typedef enum {
@@ -96,8 +97,9 @@ typedef struct ht_t ht_t;
 struct fn_t {
 	fn_type_t type;
 	int arity;
+	ht_t *env;
 	stmt_t *stmt;
-	value_t *(*call)(stmt_t *stmt, val_array_t *arguments, ht_t *env);
+	value_t *(*call)(struct fn_t *stmt, val_array_t *arguments, ht_t *env);
 };
 
 struct expr_t {

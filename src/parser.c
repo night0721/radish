@@ -29,6 +29,7 @@ void error(token_t *token, char *message)
 		fprintf(stderr, "[line %d] at '%s': %s\n", token->line, token->value, message);
 	}
 	errno = 65;
+	exit(65);
 	synchronize();
 }
 
@@ -330,34 +331,42 @@ void free_statement(stmt_t *stmt)
 	if (!stmt) {
 		return;
 	}
-	if (stmt->type == STMT_PRINT) {
-		free_expr(stmt->as.print.expression);
-		free(stmt);
-	} else if (stmt->type == STMT_EXPR) {
-		free_expr(stmt->as.expr.expression);
-		free(stmt);
-	} else if (stmt->type == STMT_VAR) {
-		free(stmt->as.variable.name.value);
-		free_expr(stmt->as.variable.initializer);
-		free(stmt);
-	} else if (stmt->type == STMT_BLOCK) {
-		free_statements(stmt->as.block.statements);
-		free(stmt);
-	} else if (stmt->type == STMT_IF) {
-		free_expr(stmt->as._if.condition);
-		free_statement(stmt->as._if.then_branch);
-		free_statement(stmt->as._if.else_branch);
-		free(stmt);
-	} else if (stmt->type == STMT_WHILE) {
-		free_expr(stmt->as._while.condition);
-		free_statement(stmt->as._while.body);
-		free(stmt);
-	} else if (stmt->type == STMT_FUN) {
-		free(stmt->as.function.name.value);
-		free_array(stmt->as.function.params);
-		free_statement(stmt->as.function.body);
-		free(stmt);
+	switch (stmt->type) {
+		case STMT_PRINT:
+			free_expr(stmt->as.print.expression);
+			break;
+		case STMT_EXPR:
+			free_expr(stmt->as.expr.expression);
+			break;
+		case STMT_VAR:
+			free(stmt->as.variable.name.value);
+			free_expr(stmt->as.variable.initializer);
+			break;
+		case STMT_BLOCK:
+			free_statements(stmt->as.block.statements);
+			break;
+		case STMT_IF:
+			free_expr(stmt->as._if.condition);
+			free_statement(stmt->as._if.then_branch);
+			free_statement(stmt->as._if.else_branch);
+			break;
+		case STMT_WHILE:
+			free_expr(stmt->as._while.condition);
+			free_statement(stmt->as._while.body);
+			break;
+		case STMT_FUN:
+			free(stmt->as.function.name.value);
+			free_array(stmt->as.function.params);
+			free_statement(stmt->as.function.body);
+			break;
+		case STMT_RETURN:
+			free(stmt->as._return.keyword.value);
+			free_expr(stmt->as._return.value);
+			break;
+		default:
+			break;
 	}
+	free(stmt);
 }
 
 void free_statements(stmt_array_t *array)
@@ -467,6 +476,24 @@ stmt_t *print_stmt(void)
 	return stmt;
 }
 
+stmt_t *return_stmt(void)
+{
+	token_t *keyword = previous();
+	expr_t *value = NULL;
+	if (!check(TOKEN_SEMICOLON)) {
+		value = expression();
+    }
+
+	consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+	stmt_t *stmt = malloc(sizeof(stmt_t));
+	stmt->type = STMT_RETURN;
+	stmt->as._return.keyword.type = keyword->type;
+	stmt->as._return.keyword.value = strdup(keyword->value);
+	stmt->as._return.keyword.line = keyword->line;
+	stmt->as._return.value = value;
+    return stmt;
+}
+
 stmt_t *while_stmt(void)
 {
 	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
@@ -521,6 +548,9 @@ stmt_t *statement(void)
 	}
 	if (match(TOKEN_PRINT)) {
 		return print_stmt();
+	}
+	if (match(TOKEN_RETURN)) {
+		return return_stmt();
 	}
 	if (match(TOKEN_WHILE)) {
 		return while_stmt();
