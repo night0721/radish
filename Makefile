@@ -6,7 +6,7 @@ TARGET = rd
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
 
-CFLAGS = -Os -march=native -mtune=native -pipe -s -std=c99 -pedantic -Wall -D_DEFAULT_SOURCE
+CFLAGS += -std=c99 -pedantic -Wall -D_DEFAULT_SOURCE
 
 SRC != find src -name "*.c"
 
