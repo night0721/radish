@@ -13,7 +13,7 @@ rd lsp # lsp server
 rd packager # create package
 ```
 
-# Depedencies
+# Dependencies
 None
 
 # Building
